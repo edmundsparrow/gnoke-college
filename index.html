@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gnoke College</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Nunito:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+<link rel="icon" type="image/png" href="global.png" />
+<link rel="apple-touch-icon" href="global.png" />
+<link rel="manifest" href="manifest.json" />
+
+<script>
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js');
+}
+</script>
+
+<style>
+:root {
+  --bg: #f4f7f5;
+  --text: #111c14;
+  --text-3: #7a9080;
+  --accent: #166534;
+  --border: #ddeae2;
+  --surface: #ffffff;
+
+  --r-lg: 12px;
+  --sh-sm: 0 4px 10px rgba(0,0,0,0.04);
+  --sh-md: 0 6px 18px rgba(0,0,0,0.08);
+
+  --font-d: 'Playfair Display', serif;
+  --font-s: 'Nunito', sans-serif;
+}
+
+[data-theme="dark"] {
+  --bg: #0f1a14;
+  --text: #e6f2ec;
+  --text-3: #8aa095;
+  --surface: #15231c;
+  --border: #24382e;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: var(--font-s);
+  background: var(--bg);
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: 24px;
+}
+
+.portal { width: 100%; max-width: 480px; }
+
+.portal-brand { text-align: center; margin-bottom: 40px; }
+
+.portal-name {
+  font-family: var(--font-d);
+  font-size: 36px;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.portal-sub {
+  font-size: 13px;
+  color: var(--text-3);
+  margin-top: 4px;
+}
+
+.portal-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.portal-card {
+  background: var(--surface);
+  border: 1.5px solid var(--border);
+  border-radius: var(--r-lg);
+  padding: 22px 24px;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  transition: all 200ms;
+  box-shadow: var(--sh-sm);
+  text-decoration: none;
+  color: inherit;
+  cursor: pointer;
+}
+
+.portal-card:hover {
+  border-color: var(--accent);
+  box-shadow: var(--sh-md);
+  transform: translateY(-1px);
+}
+
+.portal-card-icon {
+  font-size: 32px;
+}
+
+.portal-card-title {
+  font-family: var(--font-d);
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 3px;
+}
+
+.portal-card-desc {
+  font-size: 13px;
+  color: var(--text-3);
+}
+
+.portal-footer {
+  text-align: center;
+  margin-top: 32px;
+  font-size: 12px;
+  color: var(--text-3);
+}
+
+.portal-theme {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+}
+
+.theme-btn {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.install-btn {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  margin-top: 14px;
+  padding: 13px 20px;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: var(--r-lg);
+  font-family: var(--font-s);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: var(--sh-sm);
+  transition: opacity 150ms;
+}
+.install-btn:hover { opacity: 0.88; }
+.install-btn.visible { display: flex; }
+</style>
+</head>
+
+<body>
+
+<button class="theme-btn portal-theme" onclick="toggleTheme()"></button>
+
+<div class="portal">
+  <div class="portal-brand">
+    <div class="portal-name">Gnoke College</div>
+    <div class="portal-sub">Offline School Management System</div>
+  </div>
+
+  <div class="portal-cards">
+
+    <a href="student.html" class="portal-card" onclick="sav7eLast('student.html')">
+      <div class="portal-card-icon">🎓</div>
+      <div>
+        <div class="portal-card-title">Student Registration</div>
+        <div class="portal-card-desc">Register and manage student records</div>
+      </div>
+    </a>
+
+    <a href="staffreg.html" class="portal-card" onclick="saveLast('staffreg.html')">
+      <div class="portal-card-icon">👨‍🏫</div>
+      <div>
+        <div class="portal-card-title">Staff Module</div>
+        <div class="portal-card-desc">Manage staff profiles and data</div>
+      </div>
+    </a>
+
+    <a href="results.html" class="portal-card" onclick="saveLast('results.html')">
+      <div class="portal-card-icon">📊</div>
+      <div>
+        <div class="portal-card-title">Results Management</div>
+        <div class="portal-card-desc">Compile and manage student results</div>
+      </div>
+    </a>
+
+  </div>
+
+  <button class="install-btn" id="install-btn">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v13M7 11l5 5 5-5"/><path d="M3 19h18"/></svg>
+    Add to Home Screen
+  </button>
+
+  <div class="portal-footer">
+    Gnoke Suite · Offline-first · No server required
+  </div>
+</div>
+
+<script>
+const THEME_KEY = 'gnoke_college_theme';
+const LAST = 'gnoke_last_page';
+
+(function() {
+  const t = localStorage.getItem(THEME_KEY) || 'light';
+  document.documentElement.setAttribute('data-theme', t);
+
+  const MOON = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3"/></svg>`;
+  const SUN  = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/></svg>`;
+
+  document.querySelectorAll('.theme-btn').forEach(b => b.innerHTML = t === 'dark' ? SUN : MOON);
+})();
+
+function toggleTheme() {
+  const next = document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
+  document.documentElement.setAttribute('data-theme', next);
+  localStorage.setItem(THEME_KEY, next);
+  location.reload();
+}
+
+function saveLast(page) {
+  localStorage.setItem(LAST, page);
+}
+
+/* ── PWA Install prompt ── */
+let _installPrompt = null;
+
+window.addEventListener('beforeinstallprompt', e => {
+  e.preventDefault();
+  _installPrompt = e;
+  document.getElementById('install-btn').classList.add('visible');
+});
+
+window.addEventListener('appinstalled', () => {
+  document.getElementById('install-btn').classList.remove('visible');
+  _installPrompt = null;
+});
+
+document.getElementById('install-btn').addEventListener('click', async () => {
+  if (!_installPrompt) return;
+  _installPrompt.prompt();
+  const { outcome } = await _installPrompt.userChoice;
+  if (outcome === 'accepted') _installPrompt = null;
+});
+</script>
+
+</body>
+</html>

@@ -1,0 +1,768 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Print Centre — School Management</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.2/sql-wasm.js"></script>
+  <link rel="stylesheet" href="sch.css">
+  <style>
+    body { display: flex; }
+
+    /* ── Mode tabs ── */
+    .mode-bar {
+      display: flex; gap: 6px; padding: 14px 24px 0;
+      border-bottom: 1px solid var(--border);
+      background: var(--card-bg);
+    }
+    .mode-tab {
+      padding: 9px 18px; font-size: 0.83rem; font-weight: 600;
+      border: none; background: none; color: var(--text-mid);
+      border-bottom: 2px solid transparent; cursor: pointer;
+      transition: all 150ms; margin-bottom: -1px; font-family: inherit;
+    }
+    .mode-tab:hover { color: var(--text); }
+    .mode-tab.active { color: var(--primary); border-bottom-color: var(--primary); }
+
+    /* ── Controls bar ── */
+    .controls-bar {
+      display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+      padding: 12px 24px; border-bottom: 1px solid var(--border);
+      background: var(--card-bg);
+    }
+    .ctrl-sep { width: 1px; height: 22px; background: var(--border-2); flex-shrink: 0; }
+    .ctrl-label {
+      font-size: 0.68rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: .07em; color: var(--text-muted);
+    }
+
+    /* ── Preview area ── */
+    .preview-wrap {
+      flex: 1; overflow-y: auto; padding: 24px;
+      background: #e8e4dc;
+    }
+    .preview-empty {
+      display: flex; flex-direction: column; align-items: center;
+      justify-content: center; min-height: 340px; gap: 10px;
+      color: var(--text-muted);
+    }
+    .preview-empty svg { opacity: .25; }
+    .preview-empty p { font-size: 0.88rem; }
+
+    /* ── Stats bar ── */
+    .stats-bar {
+      display: flex; align-items: center; gap: 20px; padding: 10px 24px;
+      background: var(--card-bg); border-bottom: 1px solid var(--border);
+      font-size: 0.78rem; flex-wrap: wrap;
+    }
+    .stats-bar span { color: var(--text-muted); }
+    .stats-bar strong { color: var(--text); }
+
+    /* ══════════════════════════════
+       REPORT CARD (per student)
+    ══════════════════════════════ */
+    .report-card {
+      width: 210mm; min-height: 148mm;
+      background: #fff; margin: 0 auto 20px;
+      padding: 12mm 10mm 10mm;
+      box-shadow: 0 4px 24px rgba(0,0,0,.18);
+      font-family: 'Times New Roman', serif;
+      font-size: 9.5pt; color: #000;
+      page-break-after: always;
+      position: relative;
+    }
+    .rc-school-name {
+      text-align: center; font-size: 15pt; font-weight: 700;
+      text-transform: uppercase; letter-spacing: .04em;
+      border-bottom: 2.5px double #000; padding-bottom: 4px; margin-bottom: 4px;
+    }
+    .rc-subtitle {
+      text-align: center; font-size: 9pt; color: #444;
+      margin-bottom: 8px; text-transform: uppercase; letter-spacing: .06em;
+    }
+    .rc-meta-row {
+      display: flex; justify-content: space-between; align-items: baseline;
+      border: 1px solid #000; padding: 4px 8px; margin-bottom: 3px;
+      font-size: 9pt;
+    }
+    .rc-meta-row span { flex: 1; }
+    .rc-meta-row span + span { text-align: center; }
+    .rc-meta-row span:last-child { text-align: right; }
+    .rc-name-row {
+      border: 1px solid #000; border-top: none;
+      padding: 5px 8px; margin-bottom: 6px;
+      font-size: 10pt; font-weight: 700; text-transform: uppercase;
+    }
+
+    /* Scores table */
+    .rc-table { width: 100%; border-collapse: collapse; margin-bottom: 6px; }
+    .rc-table th, .rc-table td {
+      border: 1px solid #000; padding: 3px 5px;
+      font-size: 8.5pt; text-align: center;
+    }
+    .rc-table th { background: #f0f0f0; font-weight: 700; text-transform: uppercase; font-size: 7.5pt; }
+    .rc-table td.subj { text-align: left; font-weight: 600; }
+    .rc-table td.total-col { font-weight: 700; }
+    .rc-table td.grade-col { font-weight: 700; }
+    .rc-table .social-th { background: #e8e8e8; }
+
+    /* Footer section */
+    .rc-footer {
+      display: grid; grid-template-columns: 1fr 1fr 1fr;
+      gap: 0; border: 1px solid #000; border-top: none; margin-bottom: 6px;
+    }
+    .rc-footer-cell {
+      padding: 4px 7px; border-right: 1px solid #000; font-size: 8.5pt;
+    }
+    .rc-footer-cell:last-child { border-right: none; }
+    .rc-footer-label { font-weight: 700; font-size: 7.5pt; text-transform: uppercase; }
+    .rc-footer-val { font-size: 9pt; margin-top: 1px; min-height: 14px; }
+
+    .rc-comment-row {
+      display: flex; align-items: flex-start; gap: 8px;
+      border: 1px solid #000; border-top: none; padding: 4px 7px;
+      font-size: 8.5pt; min-height: 24px;
+    }
+    .rc-comment-row + .rc-comment-row { border-top: none; }
+    .rc-comment-label { font-weight: 700; white-space: nowrap; text-transform: uppercase; font-size: 7.5pt; min-width: 130px; }
+    .rc-comment-line { flex: 1; border-bottom: 1px solid #aaa; min-height: 14px; }
+    .rc-sign { white-space: nowrap; font-size: 7.5pt; font-weight: 700; margin-left: 8px; }
+    .rc-sign-line { display: inline-block; width: 60px; border-bottom: 1px solid #000; margin-left: 4px; }
+
+    /* Grading key inside table */
+    .rc-grade-key { font-size: 7.5pt; }
+
+    /* ══════════════════════════════
+       BROADSHEET
+    ══════════════════════════════ */
+    .broadsheet {
+      width: 100%; background: #fff;
+      margin: 0 auto 20px;
+      box-shadow: 0 4px 24px rgba(0,0,0,.18);
+      font-family: 'Times New Roman', serif;
+      font-size: 8.5pt; color: #000;
+      page-break-after: always;
+      overflow-x: auto;
+    }
+    .bs-header {
+      text-align: center; padding: 8px 12px 4px;
+      border-bottom: 2px solid #000;
+    }
+    .bs-school { font-size: 13pt; font-weight: 700; text-transform: uppercase; }
+    .bs-sub { font-size: 8pt; color: #444; margin-top: 2px; }
+    .bs-meta {
+      display: flex; justify-content: space-between;
+      padding: 4px 12px; font-size: 8pt;
+      border-bottom: 1px solid #000;
+    }
+    table.bs-table { width: 100%; border-collapse: collapse; }
+    table.bs-table th, table.bs-table td {
+      border: 1px solid #aaa; padding: 3px 4px;
+      font-size: 7.5pt; text-align: center;
+    }
+    table.bs-table th { background: #f0f0f0; font-weight: 700; font-size: 7pt; text-transform: uppercase; }
+    table.bs-table td.sn-col { color: #888; width: 28px; }
+    table.bs-table td.name-col { text-align: left; padding-left: 6px; font-weight: 600; white-space: nowrap; min-width: 140px; }
+    table.bs-table td.total-col { font-weight: 700; }
+    table.bs-table td.pos-col { font-weight: 700; color: #1e613b; }
+    .grade-A-p { color: #15803d; }
+    .grade-B-p { color: #1d4ed8; }
+    .grade-C-p { color: #b45309; }
+    .grade-D-p { color: #7c3aed; }
+    .grade-F-p { color: #b91c1c; }
+
+    /* ── Print media ── */
+    @media print {
+      @page { size: A4; margin: 0; }
+      #boot-screen, .topnav, .mode-bar, .controls-bar,
+      .stats-bar, .sidebar, #sb-overlay, .no-print { display: none !important; }
+      .content-wrap { display: block !important; }
+      .preview-wrap { padding: 0; background: #fff; overflow: visible; }
+      .report-card {
+        box-shadow: none; margin: 0;
+        width: 100%; padding: 8mm 8mm 6mm;
+      }
+      .broadsheet { box-shadow: none; }
+      .preview-empty { display: none; }
+    }
+  </style>
+</head>
+<body>
+
+<div id="boot-screen">
+  <div class="boot-logo">Print Centre</div>
+  <div class="boot-sub">Loading databases...</div>
+  <div class="spinner"></div>
+</div>
+
+<div class="content-wrap" id="app" style="display:none">
+
+  <nav class="topnav">
+    <div class="nav-left">
+      <div class="hamburger" id="menuBtn">&#9776;</div>
+      <span class="nav-page-title">Print Centre</span>
+    </div>
+    <div class="nav-right">
+      <button class="btn btn-primary btn-sm no-print" id="print-btn">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+        Print
+      </button>
+    </div>
+  </nav>
+
+  <!-- Mode tabs -->
+  <div class="mode-bar no-print">
+    <button class="mode-tab active" data-mode="reportcard">Report Cards</button>
+    <button class="mode-tab" data-mode="broadsheet">Broadsheet</button>
+  </div>
+
+  <!-- Controls -->
+  <div class="controls-bar no-print">
+
+    <!-- Report card controls -->
+    <div id="rc-controls" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;width:100%">
+      <span class="ctrl-label">Level</span>
+      <select id="rc-level" class="nav-select">
+        <option value="" disabled selected>— Select —</option>
+        <option value="Senior">Senior</option>
+        <option value="Junior">Junior</option>
+      </select>
+      <select id="rc-class" class="nav-select" disabled>
+        <option value="" disabled selected>Class</option>
+      </select>
+      <div class="ctrl-sep"></div>
+      <span class="ctrl-label">Term</span>
+      <select id="rc-term" class="nav-select">
+        <option value="FIRST">1st Term</option>
+        <option value="SECOND">2nd Term</option>
+        <option value="THIRD">3rd Term</option>
+      </select>
+      <select id="rc-session" class="nav-select"></select>
+      <div class="ctrl-sep"></div>
+      <span class="ctrl-label">Student</span>
+      <select id="rc-student" class="nav-select" disabled>
+        <option value="ALL">All Students</option>
+      </select>
+      <button class="btn btn-secondary btn-sm" id="rc-load-btn">Load Preview</button>
+    </div>
+
+    <!-- Broadsheet controls -->
+    <div id="bs-controls" style="display:none;align-items:center;gap:10px;flex-wrap:wrap;width:100%">
+      <span class="ctrl-label">Level</span>
+      <select id="bs-level" class="nav-select">
+        <option value="" disabled selected>— Select —</option>
+        <option value="Senior">Senior</option>
+        <option value="Junior">Junior</option>
+      </select>
+      <select id="bs-class" class="nav-select" disabled>
+        <option value="" disabled selected>Class</option>
+      </select>
+      <div class="ctrl-sep"></div>
+      <span class="ctrl-label">Term</span>
+      <select id="bs-term" class="nav-select">
+        <option value="FIRST">1st Term</option>
+        <option value="SECOND">2nd Term</option>
+        <option value="THIRD">3rd Term</option>
+      </select>
+      <select id="bs-session" class="nav-select"></select>
+      <button class="btn btn-secondary btn-sm" id="bs-load-btn">Load Preview</button>
+    </div>
+
+  </div>
+
+  <!-- Stats bar -->
+  <div class="stats-bar no-print" id="stats-bar" style="display:none">
+    <span>Students: <strong id="stat-students">—</strong></span>
+    <span>Subjects: <strong id="stat-subjects">—</strong></span>
+    <span>Class Avg: <strong id="stat-avg">—</strong></span>
+    <span>Highest: <strong id="stat-high">—</strong></span>
+    <span>Lowest: <strong id="stat-low">—</strong></span>
+  </div>
+
+  <!-- Preview -->
+  <div class="preview-wrap" id="preview-wrap">
+    <div class="preview-empty" id="preview-empty">
+      <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+      <p>Select a class, term and session above — then click Load Preview</p>
+    </div>
+    <div id="preview-content"></div>
+  </div>
+
+</div>
+
+<div id="toast-root"></div>
+<script src="sch.js"></script>
+<script src="menu.js"></script>
+<script>
+/* ── DB config ── */
+const IDB = {
+  students: { name: 'StudentRegisterStorage', store: 'db_blobs', key: 'db' },
+  teachers: { name: 'subteach_app',           store: 'database', key: 'db' },
+  scores:   { name: 'sch_scores',             store: 'database', key: 'db' },
+  settings: { name: 'gnoke_school_settings',  store: 'settings', key: 'cfg' },
+};
+
+const CLASSES = {
+  Senior: ['SS1A','SS1B','SS1C','SS1D','SS2A','SS2B','SS2C','SS2D','SS3A','SS3B','SS3C','SS3D'],
+  Junior: ['JSS1A','JSS1B','JSS1C','JSS1D','JSS2A','JSS2B','JSS2C','JSS2D','JSS3A','JSS3B','JSS3C','JSS3D'],
+};
+
+const SOCIAL_TRAITS = [
+  'Punctuality','Neatness','Relationship','Leadership',
+  'Confidence','Obedience','Honesty','Skills','Politeness','Sports',
+];
+
+const GRADING = [
+  { grade:'A', range:'70 – 100', remark:'Excellent'  },
+  { grade:'B', range:'60 – 69',  remark:'Very Good'  },
+  { grade:'C', range:'50 – 59',  remark:'Good'       },
+  { grade:'D', range:'40 – 49',  remark:'Pass'       },
+  { grade:'F', range:'0 – 39',   remark:'Fail'       },
+];
+
+let SQL = null;
+let studentsDB = null, scoresDB = null;
+let schoolName  = 'School Management';
+let currentMode = 'reportcard';
+
+/* ── Session options ── */
+function buildSessionOptions(selId) {
+  const sel = document.getElementById(selId);
+  const yr  = new Date().getFullYear();
+  sel.innerHTML = '';
+  for (let y = yr - 1; y <= yr + 1; y++) {
+    const o = document.createElement('option');
+    o.value = o.textContent = `${y}/${y+1}`;
+    sel.appendChild(o);
+  }
+  sel.value = `${yr}/${yr+1}`;
+}
+
+/* ── Level → class cascade ── */
+function initCascade(levelId, classId, studentId) {
+  const lvl = document.getElementById(levelId);
+  const cls = document.getElementById(classId);
+  lvl.addEventListener('change', function () {
+    cls.innerHTML = '<option value="" disabled selected>Class</option>';
+    cls.disabled = false;
+    (CLASSES[this.value] || []).forEach(c => {
+      const o = document.createElement('option');
+      o.value = o.textContent = c;
+      cls.appendChild(o);
+    });
+    if (studentId) {
+      const stu = document.getElementById(studentId);
+      stu.innerHTML = '<option value="ALL">All Students</option>';
+      stu.disabled = true;
+    }
+  });
+  if (studentId) {
+    cls.addEventListener('change', function () {
+      populateStudentSelect(this.value, studentId);
+    });
+  }
+}
+
+function populateStudentSelect(cls, selId) {
+  const sel = document.getElementById(selId);
+  sel.innerHTML = '<option value="ALL">All Students</option>';
+  sel.disabled = false;
+  if (!studentsDB || !cls) return;
+  try {
+    const r = studentsDB.exec(`SELECT id, name FROM "${cls}" ORDER BY name`);
+    if (!r.length) return;
+    r[0].values.forEach(([id, name]) => {
+      const o = document.createElement('option');
+      o.value = id;
+      o.textContent = name;
+      sel.appendChild(o);
+    });
+  } catch {}
+}
+
+/* ── Score helpers ── */
+function getStudentScores(cls, term, session) {
+  /* Returns map: studentId → { subjectName → { cat1,cat2,assignment,note,cw,exams,total,grade } } */
+  const map = {};
+  if (!scoresDB) return map;
+  try {
+    const r = scoresDB.exec(
+      `SELECT student_id, subject, cat1, cat2, assignment, note, cw, exams, total, grade
+       FROM scores WHERE class_level=? AND term=? AND session=?`,
+      [cls, term, session]
+    );
+    if (!r.length) return map;
+    r[0].values.forEach(([sid, subj, c1, c2, asgn, nt, cw, ex, tot, gr]) => {
+      if (!map[sid]) map[sid] = {};
+      map[sid][subj] = { cat1:c1, cat2:c2, assignment:asgn, note:nt, cw, exams:ex, total:tot, grade:gr };
+    });
+  } catch {}
+  return map;
+}
+
+function getStudentsInClass(cls) {
+  if (!studentsDB) return [];
+  try {
+    const r = studentsDB.exec(`SELECT id, name, sex FROM "${cls}" ORDER BY name`);
+    return r.length ? r[0].values.map(([id,name,sex]) => ({id,name,sex})) : [];
+  } catch { return []; }
+}
+
+function calcGrade(t) {
+  if (t == null || t === '') return '—';
+  const n = Number(t);
+  return n >= 70 ? 'A' : n >= 60 ? 'B' : n >= 50 ? 'C' : n >= 40 ? 'D' : 'F';
+}
+
+function calcRemark(g) {
+  return { A:'Excellent', B:'Very Good', C:'Good', D:'Pass', F:'Fail' }[g] || '—';
+}
+
+/* Compute position for each student given their average across subjects */
+function computePositions(students, scoreMap, subjects) {
+  const avgs = students.map(s => {
+    const scores = subjects.map(subj => {
+      const rec = scoreMap[s.id]?.[subj];
+      return rec ? Number(rec.total) || 0 : 0;
+    });
+    const entered = scores.filter(v => v > 0);
+    return { id: s.id, avg: entered.length ? entered.reduce((a,b) => a+b, 0) / entered.length : 0 };
+  });
+  avgs.sort((a,b) => b.avg - a.avg);
+  const posMap = {};
+  avgs.forEach((item, i) => { posMap[item.id] = i + 1; });
+  return posMap;
+}
+
+/* ══════════════════════════════
+   REPORT CARD RENDERER
+══════════════════════════════ */
+function renderReportCards(cls, term, session, filterStudentId) {
+  const students  = getStudentsInClass(cls);
+  const scoreMap  = getStudentScores(cls, term, session);
+  const termLabel = { FIRST:'First Term', SECOND:'Second Term', THIRD:'Third Term' }[term] || term;
+
+  if (!students.length) {
+    toast.warning('No students', `No students registered in ${cls}.`);
+    return '';
+  }
+
+  /* Collect all subjects that have at least one score in this class/term/session */
+  const subjSet = new Set();
+  Object.values(scoreMap).forEach(subs => Object.keys(subs).forEach(s => subjSet.add(s)));
+  const subjects = [...subjSet].sort();
+
+  const posMap = computePositions(students, scoreMap, subjects);
+
+  const list = filterStudentId === 'ALL'
+    ? students
+    : students.filter(s => s.id === filterStudentId);
+
+  /* Update stats bar */
+  updateStatsBar(students, scoreMap, subjects);
+
+  return list.map(student => {
+    const sScores  = scoreMap[student.id] || {};
+    const allTotals = subjects.map(subj => Number(sScores[subj]?.total) || 0).filter(v => v > 0);
+    const grandTotal = allTotals.reduce((a,b) => a+b, 0);
+    const average    = allTotals.length ? (grandTotal / allTotals.length).toFixed(1) : '—';
+    const position   = posMap[student.id] || '—';
+
+    /* Subjects rows */
+    const subjectRows = subjects.map((subj, idx) => {
+      const rec   = sScores[subj] || {};
+      const ca    = [rec.cat1, rec.cat2].filter(v => v != null && v !== '').map(Number);
+      const test  = ca.length ? ca.reduce((a,b) => a+b, 0) : '';
+      const grade = rec.grade || (rec.total != null ? calcGrade(rec.total) : '—');
+      const trait = SOCIAL_TRAITS[idx] || '';
+      const gradeKey = GRADING[idx];
+
+      return `<tr>
+        <td class="subj">${subj.toUpperCase()}</td>
+        <td>${test !== '' ? test : '—'}</td>
+        <td>${rec.exams != null && rec.exams !== '' ? rec.exams : '—'}</td>
+        <td class="total-col">${rec.total != null && rec.total !== '' ? rec.total : '—'}</td>
+        <td class="grade-col grade-${grade}-p">${grade}</td>
+        <td>${calcRemark(grade)}</td>
+        <td style="background:#fafafa;font-size:7.5pt">${trait}</td>
+        <td style="background:#fafafa"></td>
+        ${gradeKey
+          ? `<td class="rc-grade-key" style="background:#f5f5f5;font-weight:700">${gradeKey.grade}</td>
+             <td class="rc-grade-key" style="background:#f5f5f5">${gradeKey.range}</td>
+             <td class="rc-grade-key" style="background:#f5f5f5">${gradeKey.remark}</td>`
+          : `<td style="background:#f5f5f5"></td><td style="background:#f5f5f5"></td><td style="background:#f5f5f5"></td>`
+        }
+      </tr>`;
+    }).join('');
+
+    return `
+    <div class="report-card">
+      <div class="rc-school-name">${schoolName.toUpperCase()}</div>
+      <div class="rc-subtitle">Student Report Card</div>
+
+      <div class="rc-meta-row">
+        <span><b>CLASS:</b> ${cls}</span>
+        <span><b>TERM:</b> ${termLabel}</span>
+        <span><b>SESSION:</b> ${session}</span>
+      </div>
+      <div class="rc-name-row">
+        STUDENT NAME: &nbsp;${student.name.toUpperCase()}
+      </div>
+
+      <table class="rc-table">
+        <thead>
+          <tr>
+            <th rowspan="2" style="text-align:left;min-width:100px">Subject</th>
+            <th rowspan="2">Test<br>(30%)</th>
+            <th rowspan="2">Exam<br>(70%)</th>
+            <th rowspan="2">Total<br>(100%)</th>
+            <th rowspan="2">Grade</th>
+            <th rowspan="2">Remarks</th>
+            <th class="social-th" colspan="2">Social Traits</th>
+            <th class="rc-grade-key" colspan="3" style="background:#ebebeb">Grading Key</th>
+          </tr>
+          <tr>
+            <th class="social-th">Trait</th>
+            <th class="social-th">Rating</th>
+            <th class="rc-grade-key" style="background:#ebebeb">Grade</th>
+            <th class="rc-grade-key" style="background:#ebebeb">Score</th>
+            <th class="rc-grade-key" style="background:#ebebeb">Remark</th>
+          </tr>
+        </thead>
+        <tbody>${subjectRows}</tbody>
+        <tfoot>
+          <tr>
+            <td colspan="3" style="text-align:right;font-weight:700;font-size:8pt">TOTAL / AVERAGE</td>
+            <td class="total-col">${grandTotal || '—'}</td>
+            <td colspan="2" style="font-weight:700">${average}</td>
+            <td colspan="5"></td>
+          </tr>
+        </tfoot>
+      </table>
+
+      <div class="rc-footer">
+        <div class="rc-footer-cell">
+          <div class="rc-footer-label">Position in Class</div>
+          <div class="rc-footer-val">${position} of ${students.length}</div>
+        </div>
+        <div class="rc-footer-cell">
+          <div class="rc-footer-label">Subjects Offered</div>
+          <div class="rc-footer-val">${subjects.length}</div>
+        </div>
+        <div class="rc-footer-cell">
+          <div class="rc-footer-label">Status</div>
+          <div class="rc-footer-val"></div>
+        </div>
+        <div class="rc-footer-cell">
+          <div class="rc-footer-label">Fees Owed</div>
+          <div class="rc-footer-val"></div>
+        </div>
+        <div class="rc-footer-cell">
+          <div class="rc-footer-label">Next Term Fee</div>
+          <div class="rc-footer-val"></div>
+        </div>
+        <div class="rc-footer-cell">
+          <div class="rc-footer-label">Reopening Date</div>
+          <div class="rc-footer-val"></div>
+        </div>
+      </div>
+
+      <div class="rc-comment-row">
+        <span class="rc-comment-label">Class Teacher's Comment:</span>
+        <span class="rc-comment-line"></span>
+        <span class="rc-sign">Sign: <span class="rc-sign-line"></span></span>
+      </div>
+      <div class="rc-comment-row" style="border:1px solid #000;border-top:none">
+        <span class="rc-comment-label">Principal's Comment:</span>
+        <span class="rc-comment-line"></span>
+        <span class="rc-sign">Sign: <span class="rc-sign-line"></span></span>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+/* ══════════════════════════════
+   BROADSHEET RENDERER
+══════════════════════════════ */
+function renderBroadsheet(cls, term, session) {
+  const students  = getStudentsInClass(cls);
+  const scoreMap  = getStudentScores(cls, term, session);
+  const termLabel = { FIRST:'First Term', SECOND:'Second Term', THIRD:'Third Term' }[term] || term;
+
+  if (!students.length) {
+    toast.warning('No students', `No students registered in ${cls}.`);
+    return '';
+  }
+
+  const subjSet = new Set();
+  Object.values(scoreMap).forEach(subs => Object.keys(subs).forEach(s => subjSet.add(s)));
+  const subjects = [...subjSet].sort();
+
+  if (!subjects.length) {
+    toast.warning('No scores', 'No scores found for this selection.');
+    return '';
+  }
+
+  const posMap = computePositions(students, scoreMap, subjects);
+  updateStatsBar(students, scoreMap, subjects);
+
+  /* Build student rows sorted by position */
+  const sorted = [...students].sort((a, b) => (posMap[a.id] || 999) - (posMap[b.id] || 999));
+
+  const headerSubjs = subjects.map(s =>
+    `<th style="min-width:38px;max-width:52px;word-break:break-word;font-size:6.5pt">${s.replace(' ','\u00A0')}</th>`
+  ).join('');
+
+  const bodyRows = sorted.map((s, i) => {
+    const sScores = scoreMap[s.id] || {};
+    const totals  = subjects.map(subj => sScores[subj]?.total != null ? Number(sScores[subj].total) : null);
+    const entered = totals.filter(v => v !== null);
+    const grandTotal = entered.reduce((a,b) => a+b, 0);
+    const average    = entered.length ? (grandTotal / entered.length).toFixed(1) : '—';
+    const position   = posMap[s.id] || '—';
+
+    const subjCells = subjects.map((subj, si) => {
+      const t = totals[si];
+      const g = t !== null ? calcGrade(t) : null;
+      return `<td class="${g ? 'grade-'+g+'-p' : ''}">${t !== null ? t : '—'}</td>`;
+    }).join('');
+
+    return `<tr>
+      <td class="sn-col">${i+1}</td>
+      <td class="name-col">${s.name}</td>
+      ${subjCells}
+      <td class="total-col">${grandTotal || '—'}</td>
+      <td>${average}</td>
+      <td class="pos-col">${position}</td>
+    </tr>`;
+  }).join('');
+
+  return `
+  <div class="broadsheet">
+    <div class="bs-header">
+      <div class="bs-school">${schoolName.toUpperCase()}</div>
+      <div class="bs-sub">Broadsheet — ${termLabel} ${session}</div>
+    </div>
+    <div class="bs-meta">
+      <span><b>Class:</b> ${cls}</span>
+      <span><b>No. of Students:</b> ${students.length}</span>
+      <span><b>No. of Subjects:</b> ${subjects.length}</span>
+    </div>
+    <table class="bs-table">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th style="text-align:left;min-width:140px">Student Name</th>
+          ${headerSubjs}
+          <th>Total</th>
+          <th>Average</th>
+          <th>Position</th>
+        </tr>
+      </thead>
+      <tbody>${bodyRows}</tbody>
+    </table>
+  </div>`;
+}
+
+/* ── Stats bar update ── */
+function updateStatsBar(students, scoreMap, subjects) {
+  const bar = document.getElementById('stats-bar');
+  bar.style.display = 'flex';
+
+  const allAvgs = students.map(s => {
+    const vals = subjects.map(subj => scoreMap[s.id]?.[subj]?.total).filter(v => v != null).map(Number);
+    return vals.length ? vals.reduce((a,b) => a+b, 0) / vals.length : null;
+  }).filter(v => v !== null);
+
+  document.getElementById('stat-students').textContent = students.length;
+  document.getElementById('stat-subjects').textContent = subjects.length;
+  document.getElementById('stat-avg').textContent  = allAvgs.length ? (allAvgs.reduce((a,b)=>a+b,0)/allAvgs.length).toFixed(1) : '—';
+  document.getElementById('stat-high').textContent = allAvgs.length ? Math.max(...allAvgs).toFixed(1) : '—';
+  document.getElementById('stat-low').textContent  = allAvgs.length ? Math.min(...allAvgs).toFixed(1) : '—';
+}
+
+/* ── Mode switching ── */
+function setMode(mode) {
+  currentMode = mode;
+  document.querySelectorAll('.mode-tab').forEach(t => t.classList.toggle('active', t.dataset.mode === mode));
+  document.getElementById('rc-controls').style.display = mode === 'reportcard' ? 'flex' : 'none';
+  document.getElementById('bs-controls').style.display = mode === 'broadsheet' ? 'flex' : 'none';
+  document.getElementById('preview-content').innerHTML = '';
+  document.getElementById('preview-empty').style.display = 'flex';
+  document.getElementById('stats-bar').style.display = 'none';
+}
+
+/* ── Boot ── */
+document.addEventListener('DOMContentLoaded', async () => {
+  try {
+    SQL = await initSqlJs({ locateFile: f => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.2/${f}` });
+
+    const [sB, scB, cfg] = await Promise.all([
+      idbGet(IDB.students.name, IDB.students.store, IDB.students.key),
+      idbGet(IDB.scores.name,   IDB.scores.store,   IDB.scores.key),
+      idbGet(IDB.settings.name, IDB.settings.store, IDB.settings.key).catch(() => null),
+    ]);
+
+    studentsDB = sB  ? new SQL.Database(new Uint8Array(sB))  : null;
+    scoresDB   = scB ? new SQL.Database(new Uint8Array(scB)) : null;
+    if (cfg?.schoolName) schoolName = cfg.schoolName;
+
+  } catch(e) {
+    document.querySelector('.boot-sub').textContent = 'Failed to load. Please refresh.';
+    return;
+  }
+
+  hideBoot('app');
+
+  if (!studentsDB) toast.warning('Students DB missing', 'Register students first.');
+  if (!scoresDB)   toast.warning('Scores DB missing',   'Compile scores first.');
+
+  /* Session selects */
+  buildSessionOptions('rc-session');
+  buildSessionOptions('bs-session');
+
+  /* Cascades */
+  initCascade('rc-level', 'rc-class', 'rc-student');
+  initCascade('bs-level', 'bs-class', null);
+
+  /* Mode tabs */
+  document.querySelectorAll('.mode-tab').forEach(tab => {
+    tab.addEventListener('click', () => setMode(tab.dataset.mode));
+  });
+
+  /* Load buttons */
+  document.getElementById('rc-load-btn').addEventListener('click', () => {
+    const cls     = document.getElementById('rc-class').value;
+    const term    = document.getElementById('rc-term').value;
+    const session = document.getElementById('rc-session').value;
+    const student = document.getElementById('rc-student').value;
+    if (!cls) { toast.warning('Select a class', ''); return; }
+    const html = renderReportCards(cls, term, session, student);
+    if (!html) return;
+    document.getElementById('preview-empty').style.display = 'none';
+    document.getElementById('preview-content').innerHTML = html;
+    toast.success('Ready', student === 'ALL' ? `All cards loaded for ${cls}.` : 'Report card loaded.');
+  });
+
+  document.getElementById('bs-load-btn').addEventListener('click', () => {
+    const cls     = document.getElementById('bs-class').value;
+    const term    = document.getElementById('bs-term').value;
+    const session = document.getElementById('bs-session').value;
+    if (!cls) { toast.warning('Select a class', ''); return; }
+    const html = renderBroadsheet(cls, term, session);
+    if (!html) return;
+    document.getElementById('preview-empty').style.display = 'none';
+    document.getElementById('preview-content').innerHTML = html;
+    toast.success('Ready', `Broadsheet loaded for ${cls}.`);
+  });
+
+  /* Print */
+  document.getElementById('print-btn').addEventListener('click', () => {
+    const content = document.getElementById('preview-content').innerHTML;
+    if (!content.trim()) { toast.warning('Nothing to print', 'Load a preview first.'); return; }
+    window.print();
+  });
+});
+</script>
+</body>
+</html>

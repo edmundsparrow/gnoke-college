@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Enrolled Staff — Admin Module</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.2/sql-wasm.js"></script>
+  <link rel="stylesheet" href="sch.css">
+  <style> body { display: flex; } </style>
+</head>
+<body>
+
+<div id="boot-screen">
+  <div class="boot-logo">School Management</div>
+  <div class="boot-sub">Loading database...</div>
+  <div class="spinner"></div>
+</div>
+
+
+<div class="content-wrap" id="app" style="display:none">
+  <nav class="topnav">
+    <div class="nav-left">
+      <div class="hamburger" id="menuBtn">&#9776;</div>
+      <select id="roleFilter" class="nav-select">
+        <option value="All">All Staff</option>
+        <option value="Subject Teacher">Subject Teachers</option>
+        <option value="Class Teacher">Class Teachers</option>
+        <option value="Other">Administrators</option>
+      </select>
+    </div>
+    <div class="nav-right">
+      <button class="btn btn-secondary btn-sm" id="export-btn">Export DB</button>
+    </div>
+  </nav>
+
+  <div class="main-content">
+    <div class="page-header">
+      <h1 id="dynamicTitle">Enrolled Staff</h1>
+      <p>All registered staff members.</p>
+    </div>
+
+    <div class="table-card">
+      <div class="table-toolbar">
+        <div class="table-toolbar-left">
+          <span class="table-label" id="tableLabel">All Staff</span>
+          <span class="badge-count" id="staff-badge">0</span>
+        </div>
+        <div class="search-box">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+          <input type="text" id="search-input" placeholder="Search staff...">
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>#</th><th>Name</th><th>Role</th><th>Subject</th>
+              <th>Classes</th><th>Email</th><th>Username</th><th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="staff-body">
+            <tr><td colspan="8" class="empty-row">No staff found.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="toast-root"></div>
+
+<script src="sch.js"></script>
+<script src="menu.js"></script>
+<script>
+const IDB = { name: 'subteach_app', store: 'database', key: 'db' };
+let db  = null;
+let SQL = null;
+
+const SUBJECTS = ['English','Mathematics','Basic Science','Basic Technology','Social Studies',
+  'Civic Education','Agricultural Science','Business Studies','Home Economics',
+  'Christian Religious Studies','Islamic Religious Studies','French','Yoruba','Igbo','Hausa',
+  'Physics','Chemistry','Biology','Geography','Economics','Government',
+  'Literature','Commerce','Accounting','Further Mathematics'];
+
+async function saveDB() {
+  if (db) await idbSet(IDB.name, IDB.store, IDB.key, db.export());
+}
+function countAll() {
+  try { const r = db.exec('SELECT COUNT(*) FROM teachers'); return r.length ? r[0].values[0][0] : 0; } catch { return 0; }
+}
+function updateSidebar() {
+  const n = countAll();
+  const ec = document.getElementById('sb-staff-count');
+  if (ec) ec.textContent = n;
+}
+
+const ROLES = {
+  'Subject Teacher': { pill: 'role-subject', label: 'Subject Teacher' },
+  'Class Teacher':   { pill: 'role-class',   label: 'Class Teacher'   },
+  'Other':           { pill: 'role-admin',   label: 'Administrator'   },
+};
+
+function rolePill(role) {
+  const r = ROLES[role] || { pill: 'role-admin', label: role };
+  return `<span class="role-pill ${r.pill}">${r.label}</span>`;
+}
+
+function renderTable() {
+  const q      = document.getElementById('search-input').value.trim();
+  const filter = document.getElementById('roleFilter').value;
+  const tbody  = document.getElementById('staff-body');
+  const badge  = document.getElementById('staff-badge');
+
+  let sql    = `SELECT id,role,subject,classes,name,email,username FROM teachers WHERE 1=1`;
+  const params = [];
+  if (filter !== 'All') { sql += ' AND role=?'; params.push(filter); }
+  if (q) { sql += ' AND (name LIKE ? OR email LIKE ? OR username LIKE ?)'; const t = `%${q}%`; params.push(t,t,t); }
+  sql += ' ORDER BY name ASC';
+
+  try {
+    const res = db.exec(sql, params);
+    if (!res.length || !res[0].values.length) {
+      badge.textContent = '0';
+      tbody.innerHTML = `<tr><td colspan="8" class="empty-row">${q ? 'No results for that search.' : 'No staff registered yet.'}</td></tr>`;
+      return;
+    }
+    badge.textContent = res[0].values.length;
+    tbody.innerHTML = res[0].values.map(([id,role,subject,classes,name,email,username], i) => {
+      const sub = (role === 'Other') ? '—' : (subject === 'N/A' ? '—' : `<span class="badge-subject">${subject}</span>`);
+      const cls = (classes === 'N/A') ? '—' : classes.split(',').map(c => `<span class="badge-classes">${c}</span>`).join('');
+      return `<tr>
+        <td>${i+1}</td>
+        <td>${name}</td>
+        <td>${rolePill(role)}</td>
+        <td>${sub}</td>
+        <td>${cls}</td>
+        <td>${email||'—'}</td>
+        <td>${username}</td>
+        <td><div class="tbl-actions">
+          <button onclick="viewStaff(${id})">View</button>
+          <button onclick="editStaff(${id})">Edit</button>
+          <button class="danger" onclick="deleteStaff(${id},'${name.replace(/'/g,"\\'")}')">Delete</button>
+        </div></td>
+      </tr>`;
+    }).join('');
+  } catch(e) {
+    tbody.innerHTML = `<tr><td colspan="8" class="empty-row">Error: ${e.message}</td></tr>`;
+  }
+}
+
+function updateLabel() {
+  const filter = document.getElementById('roleFilter').value;
+  const map = { All: 'All Staff', 'Subject Teacher': 'Subject Teachers', 'Class Teacher': 'Class Teachers', Other: 'Administrators' };
+  document.getElementById('tableLabel').textContent     = map[filter] || filter;
+  document.getElementById('dynamicTitle').textContent   = map[filter] || filter;
+}
+
+/* ── View ── */
+function viewStaff(id) {
+  const r = db.exec('SELECT * FROM teachers WHERE id=?', [id]);
+  if (!r.length) return;
+  const [,role,subject,classes,name,email,username,password,secret,created_at] = r[0].values[0];
+  const ov = document.createElement('div'); ov.className = 'overlay';
+  ov.innerHTML = `<div class="modal">
+    <h3>${name}</h3>
+    <p>
+      <strong>Role:</strong> ${role === 'Other' ? 'Administrator' : role}<br>
+      <strong>Subject / Notes:</strong> ${subject}<br>
+      <strong>Classes:</strong> ${classes}<br>
+      <strong>Email:</strong> ${email||'—'}<br>
+      <strong>Username:</strong> ${username}<br>
+      <strong>Password:</strong> ${password}<br>
+      <strong>Secret Word:</strong> ${secret||'—'}<br>
+      <strong>Registered:</strong> ${formatDate(created_at)}
+    </p>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="this.closest('.overlay').remove()">Close</button>
+    </div></div>`;
+  document.body.appendChild(ov);
+  ov.onclick = e => { if (e.target === ov) ov.remove(); };
+}
+
+/* ── Edit ── */
+function editStaff(id) {
+  const r = db.exec('SELECT * FROM teachers WHERE id=?', [id]);
+  if (!r.length) return;
+  const [,role,subject,classes,name,email,username,password,secret] = r[0].values[0];
+  const classArr = classes === 'N/A' ? [] : classes.split(',');
+  const isCT = role === 'Class Teacher', isOther = role === 'Other';
+  const cMode = isCT ? 'radio' : 'checkbox';
+  const subOpts = SUBJECTS.map(s => `<option${s === subject ? ' selected' : ''}>${s}</option>`).join('');
+  const clsHtml = ['JSS1','JSS2','JSS3','SS1','SS2','SS3'].map(v =>
+    `<label class="class-check"><input type="${cMode}" ${cMode==='radio'?'name="ecls"':''} value="${v}" ${classArr.includes(v)?'checked':''}><label>${v}</label></label>`).join('');
+
+  const ov = document.createElement('div'); ov.className = 'overlay';
+  ov.innerHTML = `<div class="modal modal-lg">
+    <h3>Edit Staff Member</h3>
+    <div class="form-grid">
+      <div class="field-group full">
+        <label class="field-label">Role *</label>
+        <select id="e-role" class="field-input" onchange="onEditRole()">
+          <option${role==='Subject Teacher'?' selected':''}>Subject Teacher</option>
+          <option${role==='Class Teacher'?' selected':''}>Class Teacher</option>
+          <option${role==='Other'?' selected':''}>Other</option>
+        </select>
+      </div>
+      <div class="field-group" id="eg-sub" style="display:${isOther?'none':'block'}">
+        <label class="field-label">Subject</label>
+        <select id="e-subject" class="field-input" ${isCT?'disabled':''}><option value="">— Select —</option>${subOpts}</select>
+      </div>
+      <div class="field-group full" id="eg-cls" style="display:${isOther?'none':'block'}">
+        <label class="field-label" id="e-cls-lbl">${isCT?'Assigned Class *':'Classes Taught *'}</label>
+        <div class="classes-grid" id="e-cls-grid">${clsHtml}</div>
+      </div>
+      <div class="field-group full" id="eg-other" style="display:${isOther?'block':'none'}">
+        <label class="field-label">Role Description *</label>
+        <textarea id="e-role-desc" class="field-input">${isOther?subject:''}</textarea>
+      </div>
+      <div class="field-group full"><label class="field-label">Full Name *</label><input type="text" id="e-name" class="field-input" value="${name}"></div>
+      <div class="field-group"><label class="field-label">Email</label><input type="email" id="e-email" class="field-input" value="${email||''}"></div>
+      <div class="field-group"><label class="field-label">Username *</label><input type="text" id="e-username" class="field-input" value="${username}"></div>
+      <div class="field-group">
+        <label class="field-label">Password * (6 digits)</label>
+        <div class="pw-wrap"><input type="password" id="e-pw" class="field-input" value="${password}" maxlength="6">
+        <button type="button" class="pw-eye" onclick="togglePw('e-pw')">👁</button></div>
+      </div>
+      <div class="field-group">
+        <label class="field-label">Secret Word</label>
+        <div class="pw-wrap"><input type="password" id="e-secret" class="field-input" value="${secret||''}">
+        <button type="button" class="pw-eye" onclick="togglePw('e-secret')">👁</button></div>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" id="m-cancel">Cancel</button>
+      <button class="btn btn-primary" id="m-save">Save Changes</button>
+    </div></div>`;
+
+  document.body.appendChild(ov);
+  ov.onclick = e => { if (e.target === ov) ov.remove(); };
+  ov.querySelector('#m-cancel').onclick = () => ov.remove();
+  ov.querySelector('#m-save').onclick = async () => {
+    const nr = document.getElementById('e-role').value;
+    const nn = document.getElementById('e-name').value.trim();
+    const nu = document.getElementById('e-username').value.trim();
+    const np = document.getElementById('e-pw').value;
+    if (!nn || !nu) { toast.error('Missing','Name and username required.'); return; }
+    if (!/^\d{6}$/.test(np)) { toast.error('Invalid','Password must be 6 digits.'); return; }
+    let ns = 'N/A', nc = 'N/A';
+    if (nr === 'Subject Teacher') {
+      ns = document.getElementById('e-subject').value;
+      if (!ns) { toast.error('Missing','Select a subject.'); return; }
+      const sel = [...document.querySelectorAll('#e-cls-grid input:checked')].map(i => i.value);
+      if (!sel.length) { toast.error('Missing','Select at least one class.'); return; }
+      nc = sel.join(',');
+    } else if (nr === 'Class Teacher') {
+      const sel = [...document.querySelectorAll('#e-cls-grid input:checked')].map(i => i.value);
+      if (!sel.length) { toast.error('Missing','Select a class.'); return; }
+      nc = sel[0];
+    } else {
+      ns = document.getElementById('e-role-desc').value.trim();
+      if (!ns) { toast.error('Missing','Describe this role.'); return; }
+    }
+    const ne  = document.getElementById('e-email').value.trim();
+    const nsc = document.getElementById('e-secret').value.trim();
+    try {
+      db.run('UPDATE teachers SET role=?,subject=?,classes=?,name=?,email=?,username=?,password=?,secret=? WHERE id=?',
+        [nr, ns, nc, nn, ne||null, nu, np, nsc||null, id]);
+      await saveDB();
+      toast.success('Updated', `${nn} updated.`);
+      ov.remove();
+      updateSidebar();
+      renderTable();
+    } catch(err) {
+      const isDup = err.message.includes('UNIQUE');
+      toast.error(isDup ? 'Duplicate' : 'Error', isDup ? 'Email or username already exists.' : err.message);
+    }
+  };
+}
+
+function onEditRole() {
+  const role = document.getElementById('e-role').value;
+  const sub  = document.getElementById('e-subject');
+  const sg   = document.getElementById('eg-sub');
+  const cg   = document.getElementById('eg-cls');
+  const og   = document.getElementById('eg-other');
+  const lbl  = document.getElementById('e-cls-lbl');
+  if (role === 'Other') {
+    sg.style.display = 'none'; cg.style.display = 'none'; og.style.display = 'block';
+  } else {
+    sg.style.display = 'block'; cg.style.display = 'block'; og.style.display = 'none';
+    if (role === 'Class Teacher') {
+      sub.disabled = true; sub.value = ''; lbl.textContent = 'Assigned Class *';
+      document.querySelectorAll('#e-cls-grid input').forEach(i => { i.type='radio'; i.name='ecls'; i.checked=false; });
+    } else {
+      sub.disabled = false; lbl.textContent = 'Classes Taught *';
+      document.querySelectorAll('#e-cls-grid input').forEach(i => { i.type='checkbox'; i.removeAttribute('name'); i.checked=false; });
+    }
+  }
+}
+
+/* ── Delete ── */
+async function deleteStaff(id, name) {
+  if (!await confirm_modal('Remove Staff Member', `Remove "${name}" from the staff register?`)) return;
+  db.run('DELETE FROM teachers WHERE id=?', [id]);
+  await saveDB();
+  toast.success('Deleted', `${name} removed.`);
+  updateSidebar();
+  updateLabel();
+  renderTable();
+}
+
+/* ── Boot ── */
+document.addEventListener('DOMContentLoaded', async () => {
+  try {
+    SQL = await initSqlJs({ locateFile: f => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.2/${f}` });
+    const saved = await idbGet(IDB.name, IDB.store, IDB.key);
+    db = saved ? new SQL.Database(new Uint8Array(saved)) : new SQL.Database();
+    if (!saved) {
+      db.run(`CREATE TABLE teachers(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        role TEXT, subject TEXT, classes TEXT,
+        name TEXT, email TEXT UNIQUE,
+        username TEXT UNIQUE, password TEXT, secret TEXT, created_at TEXT)`);
+      await saveDB();
+    }
+  } catch(e) {
+    document.querySelector('.boot-sub').textContent = 'Failed. Please refresh.';
+    return;
+  }
+
+  const boot = document.getElementById('boot-screen');
+  boot.classList.add('hidden');
+  setTimeout(() => { boot.style.display = 'none'; document.getElementById('app').style.display = 'flex'; }, 380);
+
+  updateSidebar();
+  renderTable();
+
+  document.getElementById('roleFilter').addEventListener('change', () => { updateLabel(); renderTable(); });
+  document.getElementById('search-input').addEventListener('input', () => renderTable());
+  document.getElementById('export-btn').addEventListener('click', () => {
+    exportSqlDb(db, 'staff.db');
+    toast.success('Exported','staff.db downloaded.');
+  });
+});
+</script>
+</body>
+</html>

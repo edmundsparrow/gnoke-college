@@ -1,0 +1,670 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Score Compiler — School Management</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.2/sql-wasm.js"></script>
+  <link rel="stylesheet" href="sch.css">
+  <style>
+    body { margin: 0; }
+
+    /* ── Login ── */
+    #login-screen {
+      display: none; min-height: 100vh; align-items: center;
+      justify-content: center; background: var(--bg); padding: 20px;
+    }
+    .login-card {
+      background: var(--card-bg); border: 1px solid var(--border);
+      border-radius: var(--r-lg); padding: 36px 32px;
+      width: 100%; max-width: 380px; box-shadow: var(--sh-md);
+    }
+    .login-logo { font-family: serif; font-size: 1.6rem; font-weight: 700; color: var(--primary); }
+    .login-sub  { font-size: 0.82rem; color: var(--text-muted); margin-bottom: 26px; margin-top: 3px; }
+    .login-error { font-size: 0.78rem; color: var(--error); margin-top: 4px; display: none; }
+
+    /* ── App ── */
+    #app-screen { display: none; flex-direction: column; min-height: 100vh; }
+
+    .controls-bar {
+      display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+      padding: 10px 20px; border-bottom: 1px solid var(--border);
+      background: var(--card-bg);
+    }
+    .controls-bar .nav-select { min-width: 120px; }
+    .ctrl-sep { width: 1px; height: 22px; background: var(--border); flex-shrink: 0; }
+
+    /* ── Score table area ── */
+    .table-area {
+      flex: 1; overflow-x: auto;
+      padding: 20px;
+      padding-bottom: 20px;
+    }
+    .score-table-wrap {
+      background: var(--card-bg); border: 1px solid var(--border);
+      border-radius: var(--r-lg); overflow: hidden; box-shadow: var(--sh-sm); min-width: 780px;
+    }
+    .score-table-header {
+      padding: 12px 16px; border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    }
+    .score-table-title { font-family: serif; font-size: 1rem; font-weight: 700; color: var(--text); }
+    .score-meta { font-size: 0.78rem; color: var(--text-muted); }
+
+    table.score-tbl { width: 100%; border-collapse: collapse; font-size: 0.84rem; }
+    table.score-tbl thead tr:first-child th {
+      background: var(--primary); color: #fff; font-family: serif;
+      font-size: 0.78rem; font-weight: 600; padding: 7px 10px; text-align: left;
+    }
+    table.score-tbl thead tr:last-child th {
+      background: #ede9df; color: #777; font-size: 0.68rem; font-weight: 700;
+      text-transform: uppercase; letter-spacing: .08em; padding: 6px 8px;
+      text-align: center; border-bottom: 1px solid var(--border);
+    }
+    table.score-tbl tbody tr { border-bottom: 1px solid var(--border); transition: background 120ms; }
+    table.score-tbl tbody tr:hover { background: #fafaf7; }
+    table.score-tbl tbody tr:last-child { border-bottom: none; }
+    table.score-tbl td { padding: 4px 6px; text-align: center; font-size: 0.84rem; color: var(--text-mid); }
+    table.score-tbl td:nth-child(1) { width: 36px; color: var(--text-muted); font-size: 0.76rem; }
+    table.score-tbl td:nth-child(2) { text-align: left; padding-left: 12px; color: var(--text); font-weight: 600; white-space: nowrap; min-width: 160px; }
+    table.score-tbl td.cat3-cell, table.score-tbl td.total-cell { font-weight: 700; color: var(--text); }
+    table.score-tbl td.grade-cell { font-weight: 700; }
+
+    .score-input {
+      width: 52px; padding: 4px 6px; text-align: center;
+      border: 1.5px solid var(--border); border-radius: 6px;
+      background: var(--bg); color: var(--text); font-size: 0.83rem;
+      outline: none; transition: border-color 150ms, box-shadow 150ms;
+      -moz-appearance: textfield; appearance: textfield;
+    }
+    .score-input::-webkit-outer-spin-button,
+    .score-input::-webkit-inner-spin-button { -webkit-appearance: none; }
+    .score-input:focus { border-color: var(--primary); box-shadow: 0 0 0 2px rgba(30,97,59,.12); }
+    .score-input.over  { border-color: var(--error); background: var(--error-bg); }
+
+    .grade-A { color: #15803d; }
+    .grade-B { color: #2563eb; }
+    .grade-C { color: #d97706; }
+    .grade-D { color: #9333ea; }
+    .grade-F { color: var(--error); }
+
+    /* ── Hamburger ── */
+    .hamburger {
+      width: 36px; height: 36px; display: flex; align-items: center;
+      justify-content: center; cursor: pointer; font-size: 1.2rem;
+      border-radius: 6px; color: var(--text); transition: background 150ms;
+    }
+    .hamburger:hover { background: var(--primary-bg); }
+
+    /* ── Sidebar ── */
+    .sidebar {
+      position: fixed; top: 0; left: -260px; width: 260px; height: 100vh;
+      background: var(--card-bg); border-right: 1px solid var(--border);
+      z-index: 300; transition: left 250ms ease; display: flex; flex-direction: column;
+      box-shadow: 4px 0 20px rgba(0,0,0,.08);
+    }
+    .sidebar.active { left: 0; }
+    #sb-overlay {
+      display: none; position: fixed; inset: 0; z-index: 299;
+      background: rgba(0,0,0,.35);
+    }
+    #sb-overlay.active { display: block; }
+    .sidebar-brand {
+      padding: 20px 18px 14px; border-bottom: 1px solid var(--border);
+    }
+    .sidebar-brand h2 { font-family: serif; font-size: 1rem; font-weight: 700; color: var(--primary); }
+    .sidebar-brand span { font-size: 0.72rem; color: var(--text-muted); }
+    .sb-scroll { flex: 1; overflow-y: auto; padding: 10px 0; }
+    .menu-section {
+      font-size: 0.62rem; font-weight: 800; text-transform: uppercase;
+      letter-spacing: .1em; color: var(--text-muted); padding: 14px 18px 4px;
+    }
+    .menu-item {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 10px 18px; font-size: 0.88rem; font-weight: 600;
+      color: var(--text); cursor: pointer; border: none; background: none;
+      width: 100%; text-align: left; font-family: inherit;
+      transition: background 120ms, color 120ms;
+    }
+    .menu-item svg { flex-shrink: 0; }
+    .menu-item:hover { background: var(--primary-bg); color: var(--primary); }
+    .menu-item.danger { color: var(--error); }
+    .menu-item.danger:hover { background: var(--error-bg); }
+
+    /* ── Stats modal extras ── */
+    .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px; }
+    .stat-box { background: var(--input-bg); border-radius: 8px; padding: 14px; text-align: center; }
+    .stat-val { font-family: serif; font-size: 1.6rem; font-weight: 700; color: var(--primary); }
+    .stat-lbl { font-size: 0.72rem; color: var(--text-muted); margin-top: 2px; }
+    .grade-dist { display: flex; gap: 6px; flex-wrap: wrap; }
+    .grade-pill { display: flex; align-items: center; gap: 5px; padding: 4px 9px; border-radius: 999px; background: var(--input-bg); font-size: 0.78rem; font-weight: 600; }
+
+    /* ── Teacher topbar ── */
+    .teacher-name    { font-family: serif; font-size: 1rem; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .teacher-sub-badge { background: var(--primary-bg); color: var(--primary); padding: 2px 8px; border-radius: 999px; font-size: 0.72rem; font-weight: 700; }
+
+    /* ── Print ── */
+    .print-header { display: none; margin-bottom: 8px; font-size: 9pt; border-bottom: 2px solid #000; padding-bottom: 4px; }
+    .print-header b { font-size: 10pt; }
+    @media print {
+      @page { size: landscape; margin: .5cm; }
+      #boot-screen, #login-screen, .topnav, .controls-bar, .sidebar, #sb-overlay { display: none !important; }
+      #app-screen { display: block !important; padding: 0; }
+      .table-area { padding: 0; overflow: visible; }
+      .score-table-wrap { border: none; box-shadow: none; min-width: 100%; }
+      .score-table-header { display: none; }
+      .print-header { display: block !important; }
+      table.score-tbl { font-size: 8pt; width: 100%; }
+      table.score-tbl thead tr:first-child th { background: none !important; color: #000 !important; border: 1px solid #000; print-color-adjust: exact; }
+      table.score-tbl thead tr:last-child th  { background: #eee !important; print-color-adjust: exact; }
+      table.score-tbl tbody tr { break-inside: avoid; }
+      table.score-tbl td, table.score-tbl th  { border: 1px solid #aaa !important; padding: 2px 4px !important; }
+      .score-input { border: none !important; background: transparent !important; width: 100%; text-align: center; font-size: 8pt; }
+      body, html { background: white !important; }
+    }
+  </style>
+</head>
+<body>
+
+<div id="boot-screen">
+  <div class="boot-logo">Score Compiler</div>
+  <div class="boot-sub">Loading database engine...</div>
+  <div class="spinner"></div>
+</div>
+
+<!-- Login -->
+<div id="login-screen">
+  <div class="login-card">
+    <div class="login-logo">Score Compiler</div>
+    <div class="login-sub">Sign in with your teacher credentials</div>
+    <div class="field-group" style="margin-bottom:14px">
+      <label class="field-label">Username</label>
+      <input type="text" id="l-username" class="field-input" placeholder="Your username" autocomplete="username">
+    </div>
+    <div class="field-group">
+      <label class="field-label">Password</label>
+      <div class="pw-wrap">
+        <input type="password" id="l-password" class="field-input" placeholder="6-digit password" maxlength="6" autocomplete="current-password">
+        <button class="pw-eye" type="button" onclick="togglePw('l-password')">👁</button>
+      </div>
+      <div class="login-error" id="login-error">Invalid username or password.</div>
+    </div>
+    <div style="margin-top:20px">
+      <button class="btn btn-primary" style="width:100%" id="login-btn">Sign In</button>
+    </div>
+  </div>
+</div>
+
+<!-- App -->
+<div id="app-screen">
+
+  <!-- Sidebar -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-brand">
+      <h2>Score Compiler</h2>
+      <span>Teacher Module</span>
+    </div>
+    <div class="sb-scroll">
+      <div class="menu-section">Actions</div>
+      <button class="menu-item" id="save-btn">
+        Save Scores
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+      </button>
+      <button class="menu-item" id="load-btn">
+        Load Saved Scores
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.5"/></svg>
+      </button>
+      <button class="menu-item" id="stats-btn">
+        View Stats
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+      </button>
+      <button class="menu-item" id="export-btn">
+        Export DB
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+      </button>
+      <button class="menu-item" id="print-btn">
+        Print
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+      </button>
+      <div class="menu-section">Session</div>
+      <button class="menu-item danger" id="reset-btn">
+        Reset Table
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg>
+      </button>
+      <button class="menu-item danger" id="logout-btn">
+        Logout
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/></svg>
+      </button>
+    </div>
+  </aside>
+  <div id="sb-overlay"></div>
+
+  <div class="topnav">
+    <div class="nav-left">
+      <div class="hamburger" id="menuBtn">&#9776;</div>
+      <div>
+        <div class="teacher-name" id="t-name"></div>
+        <div><span class="teacher-sub-badge" id="t-subject"></span></div>
+      </div>
+    </div>
+    <div class="nav-right"></div>
+  </div>
+
+  <div class="controls-bar">
+    <select id="class-select" class="nav-select"><option value="">— Select Class —</option></select>
+    <div class="ctrl-sep"></div>
+    <select id="term-select" class="nav-select">
+      <option value="FIRST">1st Term</option>
+      <option value="SECOND">2nd Term</option>
+      <option value="THIRD">3rd Term</option>
+    </select>
+    <select id="session-select" class="nav-select">
+      <option>2024/2025</option>
+      <option>2025/2026</option>
+      <option>2026/2027</option>
+    </select>
+  </div>
+
+  <div class="table-area">
+    <div class="print-header" id="print-header"></div>
+    <div class="score-table-wrap">
+      <div class="score-table-header">
+        <div>
+          <div class="score-table-title" id="tbl-title">Select a class to begin</div>
+          <div class="score-meta" id="tbl-meta"></div>
+        </div>
+        <div class="score-meta" id="student-count"></div>
+      </div>
+      <table class="score-tbl">
+        <thead>
+          <tr>
+            <th rowspan="2">#</th>
+            <th rowspan="2">Student Name</th>
+            <th colspan="2">CAT (10 each)</th>
+            <th colspan="3">CAT 3 (10)</th>
+            <th rowspan="2">Exams (70)</th>
+            <th rowspan="2">CA3</th>
+            <th rowspan="2">Total</th>
+            <th rowspan="2">Grade</th>
+          </tr>
+          <tr>
+            <th>CA1</th><th>CA2</th>
+            <th>Asgn (5)</th><th>Note (2)</th><th>CW (3)</th>
+          </tr>
+        </thead>
+        <tbody id="score-body">
+          <tr><td colspan="11">
+            <div style="text-align:center;padding:50px 20px;color:#bbb">
+              <div style="font-family:serif;font-size:1.1rem;margin-bottom:6px">Select a class above</div>
+              <div style="font-size:.82rem">Choose class, term and session to begin</div>
+            </div>
+          </td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+
+</div>
+
+<div id="toast-root"></div>
+
+<script src="sch.js"></script>
+<script>
+/* ── DB config ── */
+const DB = {
+  students: { name: 'StudentRegisterStorage', store: 'db_blobs',  key: 'db' },
+  teachers: { name: 'subteach_app',           store: 'database',  key: 'db' },
+  scores:   { name: 'sch_scores',             store: 'database',  key: 'db' },
+};
+
+let SQL = null;
+let studentsDB = null, teachersDB = null, scoresDB = null;
+let currentTeacher = null;
+let hasUnsaved = false;
+
+/* ── Load all DBs ── */
+async function loadDBs() {
+  const [sB, tB, scB] = await Promise.all([
+    idbGet(DB.students.name, DB.students.store, DB.students.key),
+    idbGet(DB.teachers.name, DB.teachers.store, DB.teachers.key),
+    idbGet(DB.scores.name,   DB.scores.store,   DB.scores.key),
+  ]);
+  studentsDB = sB ? new SQL.Database(new Uint8Array(sB)) : null;
+  teachersDB = tB ? new SQL.Database(new Uint8Array(tB)) : null;
+  if (scB) {
+    scoresDB = new SQL.Database(new Uint8Array(scB));
+  } else {
+    scoresDB = new SQL.Database();
+    scoresDB.run(`CREATE TABLE IF NOT EXISTS scores(
+      id TEXT PRIMARY KEY, student_id TEXT, student_name TEXT,
+      class_level TEXT, subject TEXT, teacher_username TEXT,
+      term TEXT, session TEXT, cat1 REAL, cat2 REAL,
+      assignment REAL, note REAL, cw REAL,
+      exams REAL, total REAL, grade TEXT, updated_at TEXT)`);
+    await persistScores();
+  }
+}
+
+async function persistScores() {
+  if (scoresDB) await idbSet(DB.scores.name, DB.scores.store, DB.scores.key, scoresDB.export());
+}
+
+/* ── Auth ── */
+function verifyTeacher(username, password) {
+  if (!teachersDB) return null;
+  try {
+    const r = teachersDB.exec(
+      'SELECT id,role,subject,classes,name,username FROM teachers WHERE username=? AND password=?',
+      [username.trim(), password.trim()]
+    );
+    if (!r.length || !r[0].values.length) return null;
+    const [id,role,subject,classes,name,uname] = r[0].values[0];
+    return { id, role, subject, classes, name, username: uname };
+  } catch { return null; }
+}
+
+function expandClasses(field) {
+  if (!field || field === 'N/A') return [];
+  return field.split(',').flatMap(l => ['A','B','C','D'].map(s => `${l.trim()}${s}`));
+}
+
+/* ── Students ── */
+function getStudentsByClass(cls) {
+  if (!studentsDB) return [];
+  try {
+    const r = studentsDB.exec(`SELECT id,name,sex FROM "${cls}" ORDER BY name`);
+    return r.length ? r[0].values.map(([id,name,sex]) => ({ id, name, sex })) : [];
+  } catch { return []; }
+}
+
+/* ── Score calc ── */
+function calcGrade(t) { return t >= 70 ? 'A' : t >= 60 ? 'B' : t >= 50 ? 'C' : t >= 40 ? 'D' : 'F'; }
+
+function calcRow(row) {
+  const v = f => { const el = row.querySelector(`[data-field="${f}"]`); return el ? (parseFloat(el.value) || 0) : 0; };
+  const cat3  = v('assignment') + v('note') + v('cw');
+  const total = v('cat1') + v('cat2') + cat3 + v('exams');
+  row.querySelector('.cat3-cell').textContent = cat3 > 0 ? cat3 : '';
+  const tc = row.querySelector('.total-cell');
+  const gc = row.querySelector('.grade-cell');
+  if (total > 0) {
+    tc.textContent = total;
+    const g = calcGrade(total);
+    gc.textContent = g;
+    gc.className = `grade-cell grade-${g}`;
+  } else {
+    tc.textContent = '';
+    gc.textContent = '—';
+    gc.className = 'grade-cell';
+  }
+  hasUnsaved = true;
+}
+
+function validateInput(input) {
+  const max = parseFloat(input.dataset.max) || 100;
+  const val = parseFloat(input.value);
+  input.classList.toggle('over', !isNaN(val) && val > max);
+}
+
+/* ── Render table ── */
+function renderTable(students) {
+  const cls     = document.getElementById('class-select').value;
+  const term    = document.getElementById('term-select').value;
+  const session = document.getElementById('session-select').value;
+  document.getElementById('print-header').innerHTML =
+    `<b>SUBJECT:</b> ${currentTeacher.subject.toUpperCase()} &emsp;<b>CLASS:</b> ${cls} &emsp;<b>TEACHER:</b> ${currentTeacher.name.toUpperCase()} &emsp;<b>TERM:</b> ${term} &emsp;<b>SESSION:</b> ${session}`;
+  document.getElementById('tbl-title').textContent    = `${cls} — ${currentTeacher.subject}`;
+  document.getElementById('tbl-meta').textContent     = `${term} Term · ${session}`;
+  document.getElementById('student-count').textContent = `${students.length} student${students.length !== 1 ? 's' : ''}`;
+  const tbody = document.getElementById('score-body');
+  if (!students.length) {
+    tbody.innerHTML = `<tr><td colspan="11"><div style="text-align:center;padding:50px 20px;color:#bbb">
+      <div style="font-family:serif;font-size:1rem;margin-bottom:4px">No students in ${cls}</div>
+      <div style="font-size:.8rem">Students haven't been registered yet</div></div></td></tr>`;
+    return;
+  }
+  const mk = (s, f, max) =>
+    `<td><input class="score-input" type="number" min="0" max="${max}" step="1"
+       data-field="${f}" data-max="${max}" data-id="${s.id}"
+       oninput="validateInput(this);calcRow(this.closest('tr'))"
+       onkeydown="navInput(event,this)"></td>`;
+  tbody.innerHTML = students.map((s, i) => `
+    <tr data-id="${s.id}" data-name="${s.name}">
+      <td>${i+1}</td><td>${s.name}</td>
+      ${mk(s,'cat1',10)}${mk(s,'cat2',10)}
+      ${mk(s,'assignment',5)}${mk(s,'note',2)}${mk(s,'cw',3)}
+      ${mk(s,'exams',70)}
+      <td class="cat3-cell"></td>
+      <td class="total-cell"></td>
+      <td class="grade-cell">—</td>
+    </tr>`).join('');
+}
+
+function navInput(e, input) {
+  if (!['Enter','ArrowDown','ArrowUp'].includes(e.key)) return;
+  e.preventDefault();
+  const rows = [...document.querySelectorAll('#score-body tr')];
+  const idx  = rows.indexOf(input.closest('tr'));
+  const next = e.key === 'ArrowUp' ? rows[idx - 1] : rows[idx + 1];
+  if (next) next.querySelector(`[data-field="${input.dataset.field}"]`)?.focus();
+}
+
+/* ── Save / Load ── */
+async function saveScores() {
+  const cls     = document.getElementById('class-select').value;
+  const term    = document.getElementById('term-select').value;
+  const session = document.getElementById('session-select').value;
+  if (!cls) { toast.warning('Select a class first.',''); return; }
+  const rows = document.querySelectorAll('#score-body tr[data-id]');
+  if (!rows.length) { toast.warning('Nothing to save.',''); return; }
+  rows.forEach(row => {
+    const v = f => { const el = row.querySelector(`[data-field="${f}"]`); return el?.value !== '' ? parseFloat(el.value) : null; };
+    const [cat1,cat2,assign,note,cw,exams] = [v('cat1'),v('cat2'),v('assignment'),v('note'),v('cw'),v('exams')];
+    const cat3parts = [assign,note,cw].filter(x => x !== null);
+    const cat3      = cat3parts.length ? cat3parts.reduce((a,b) => a+b, 0) : null;
+    const totparts  = [cat1,cat2,cat3,exams].filter(x => x !== null);
+    const total     = totparts.length ? totparts.reduce((a,b) => a+b, 0) : null;
+    const grade     = total !== null ? calcGrade(total) : null;
+    const id = `${cls}_${currentTeacher.subject}_${term}_${session}_${row.dataset.id}`;
+    scoresDB.run(`
+      INSERT INTO scores(id,student_id,student_name,class_level,subject,teacher_username,
+        term,session,cat1,cat2,assignment,note,cw,exams,total,grade,updated_at)
+      VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+      ON CONFLICT(id) DO UPDATE SET
+        cat1=excluded.cat1, cat2=excluded.cat2, assignment=excluded.assignment,
+        note=excluded.note, cw=excluded.cw, exams=excluded.exams,
+        total=excluded.total, grade=excluded.grade, updated_at=excluded.updated_at`,
+      [id, row.dataset.id, row.dataset.name, cls, currentTeacher.subject,
+       currentTeacher.username, term, session, cat1, cat2, assign, note, cw,
+       exams, total, grade, new Date().toISOString()]);
+  });
+  await persistScores();
+  hasUnsaved = false;
+  toast.success('Saved', `${rows.length} records saved for ${cls}.`);
+}
+
+async function loadScores() {
+  const cls     = document.getElementById('class-select').value;
+  const term    = document.getElementById('term-select').value;
+  const session = document.getElementById('session-select').value;
+  if (!cls) return;
+  try {
+    const r = scoresDB.exec(
+      'SELECT student_id,cat1,cat2,assignment,note,cw,exams FROM scores WHERE class_level=? AND subject=? AND term=? AND session=?',
+      [cls, currentTeacher.subject, term, session]);
+    if (!r.length) return;
+    const map = new Map(r[0].values.map(row => [row[0], row]));
+    document.querySelectorAll('#score-body tr[data-id]').forEach(row => {
+      const rec = map.get(row.dataset.id); if (!rec) return;
+      const [,c1,c2,as,nt,cw,ex] = rec;
+      const set = (f, v) => { const inp = row.querySelector(`[data-field="${f}"]`); if (inp && v != null) inp.value = v; };
+      set('cat1',c1); set('cat2',c2); set('assignment',as); set('note',nt); set('cw',cw); set('exams',ex);
+      calcRow(row);
+    });
+  } catch(e) { console.warn('loadScores:', e); }
+}
+
+function clearTable() {
+  document.querySelectorAll('#score-body tr[data-id]').forEach(row => {
+    row.querySelectorAll('.score-input').forEach(i => i.value = '');
+    row.querySelector('.cat3-cell').textContent  = '';
+    row.querySelector('.total-cell').textContent = '';
+    row.querySelector('.grade-cell').textContent = '—';
+    row.querySelector('.grade-cell').className   = 'grade-cell';
+  });
+  hasUnsaved = false;
+}
+
+/* ── Stats ── */
+function showStats() {
+  const rows = [...document.querySelectorAll('#score-body tr[data-id]')];
+  if (!rows.length) { toast.info('No data','Load a class first.'); return; }
+  const grades = { A:0, B:0, C:0, D:0, F:0 };
+  let count = 0, sum = 0, entered = 0;
+  rows.forEach(row => {
+    const tc = row.querySelector('.total-cell'), gc = row.querySelector('.grade-cell');
+    const total = parseFloat(tc?.textContent) || 0;
+    if (tc?.textContent) { sum += total; entered++; }
+    if (gc?.textContent in grades) grades[gc.textContent]++;
+    count++;
+  });
+  const avg  = entered ? (sum / entered).toFixed(1) : '—';
+  const pct  = g => entered ? Math.round((grades[g] / entered) * 100) : 0;
+  const clr  = { A:'#15803d', B:'#2563eb', C:'#d97706', D:'#9333ea', F:'#dc2626' };
+  const ov   = document.createElement('div'); ov.className = 'overlay';
+  ov.innerHTML = `<div class="modal">
+    <h3>Performance Summary</h3>
+    <div class="stats-grid">
+      <div class="stat-box"><div class="stat-val">${count}</div><div class="stat-lbl">Total Students</div></div>
+      <div class="stat-box"><div class="stat-val">${avg}</div><div class="stat-lbl">Class Average</div></div>
+      <div class="stat-box"><div class="stat-val">${entered}</div><div class="stat-lbl">Scores Entered</div></div>
+      <div class="stat-box"><div class="stat-val">${count - entered}</div><div class="stat-lbl">Pending</div></div>
+    </div>
+    <div style="font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#999;margin-bottom:8px">Grade Distribution</div>
+    <div class="grade-dist">
+      ${Object.entries(grades).map(([g,n]) =>
+        `<div class="grade-pill" style="color:${clr[g]}">${g} <span style="color:#999">${n} (${pct(g)}%)</span></div>`
+      ).join('')}
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="this.closest('.overlay').remove()">Close</button>
+    </div></div>`;
+  document.body.appendChild(ov);
+  ov.onclick = e => { if (e.target === ov) ov.remove(); };
+}
+
+/* ── Show app after login ── */
+function showApp() {
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('app-screen').style.display   = 'flex';
+  document.getElementById('t-name').textContent    = currentTeacher.name;
+  document.getElementById('t-subject').textContent = currentTeacher.subject;
+  const sel = document.getElementById('class-select');
+  sel.innerHTML = '<option value="">— Select Class —</option>';
+  expandClasses(currentTeacher.classes).forEach(cls => {
+    const o = document.createElement('option');
+    o.value = o.textContent = cls;
+    sel.appendChild(o);
+  });
+  if (!studentsDB) toast.warning('Students DB missing','Import students.db to load student lists.');
+}
+
+/* ── Boot ── */
+document.addEventListener('DOMContentLoaded', async () => {
+  try {
+    SQL = await initSqlJs({ locateFile: f => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.2/${f}` });
+    document.querySelector('.boot-sub').textContent = 'Loading databases...';
+    await loadDBs();
+  } catch(e) {
+    document.querySelector('.boot-sub').textContent = 'Failed. Please refresh.';
+    return;
+  }
+
+  const boot = document.getElementById('boot-screen');
+  boot.classList.add('hidden');
+  setTimeout(() => {
+    boot.style.display = 'none';
+    document.getElementById('login-screen').style.display = 'flex';
+  }, 380);
+
+  /* Login */
+  function doLogin() {
+    const u    = document.getElementById('l-username').value;
+    const p    = document.getElementById('l-password').value;
+    const errEl = document.getElementById('login-error');
+    if (!teachersDB) { errEl.textContent = 'Teachers DB not found. Run the staff module first.'; errEl.style.display = 'block'; return; }
+    const teacher = verifyTeacher(u, p);
+    if (!teacher) { errEl.style.display = 'block'; document.getElementById('l-password').value = ''; return; }
+    errEl.style.display = 'none';
+    currentTeacher = teacher;
+    showApp();
+  }
+  document.getElementById('login-btn').onclick = doLogin;
+  document.getElementById('l-password').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+
+  /* Class / term / session controls */
+  document.getElementById('class-select').addEventListener('change', async () => {
+    if (hasUnsaved && !confirm('Unsaved changes. Switch class anyway?')) return;
+    const cls = document.getElementById('class-select').value;
+    if (!cls) return;
+    renderTable(getStudentsByClass(cls));
+    await loadScores();
+    hasUnsaved = false;
+  });
+  ['term-select','session-select'].forEach(id => {
+    document.getElementById(id).addEventListener('change', async () => {
+      if (!document.getElementById('class-select').value) return;
+      clearTable(); await loadScores();
+    });
+  });
+
+  /* Sidebar open/close */
+  const sidebar  = document.getElementById('sidebar');
+  const sbOvl    = document.getElementById('sb-overlay');
+  const menuBtn  = document.getElementById('menuBtn');
+  const openSb   = () => { sidebar.classList.add('active'); sbOvl.classList.add('active'); document.body.style.overflow = 'hidden'; };
+  const closeSb  = () => { sidebar.classList.remove('active'); sbOvl.classList.remove('active'); document.body.style.overflow = ''; };
+  menuBtn.addEventListener('click', openSb);
+  sbOvl.addEventListener('click', closeSb);
+
+  /* Bottom nav */
+  document.getElementById('save-btn').onclick   = () => { closeSb(); saveScores(); };
+  document.getElementById('load-btn').onclick   = async () => { closeSb(); await loadScores(); toast.info('Loaded','Saved scores loaded.'); };
+  document.getElementById('stats-btn').onclick  = () => { closeSb(); showStats(); };
+  document.getElementById('export-btn').onclick = () => {
+    closeSb();
+    const cls     = document.getElementById('class-select').value;
+    const term    = document.getElementById('term-select').value;
+    const session = document.getElementById('session-select').value;
+    const subject = currentTeacher ? currentTeacher.subject : '';
+    const termMap = { FIRST: 't1', SECOND: 't2', THIRD: 't3' };
+    const sessShort = session.replace('20','').replace('/20',''); // "2025/2026" → "2526"
+    const parts = [subject, cls, termMap[term] || term, sessShort]
+      .map(p => p.toLowerCase().replace(/\s+/g,'').replace(/[^a-z0-9]/g,''))
+      .filter(Boolean);
+    const filename = (parts.length === 4 ? parts.join('-') : 'scores') + '.db';
+    exportSqlDb(scoresDB, filename);
+    toast.success('Exported', filename + ' downloaded.');
+  };
+  document.getElementById('reset-btn').onclick  = async () => {
+    closeSb();
+    if (!await confirm_modal('Reset Table','Clear the current view? Saved data is not deleted.','Reset','btn-danger')) return;
+    clearTable(); toast.info('Reset','Table cleared.');
+  };
+  document.getElementById('print-btn').onclick  = () => { closeSb(); window.print(); };
+  document.getElementById('logout-btn').onclick = async () => {
+    closeSb();
+    if (hasUnsaved && !await confirm_modal('Unsaved Changes','You have unsaved changes. Logout anyway?','Logout','btn-danger')) return;
+    currentTeacher = null; hasUnsaved = false;
+    document.getElementById('app-screen').style.display   = 'none';
+    document.getElementById('login-screen').style.display = 'flex';
+    document.getElementById('l-username').value = '';
+    document.getElementById('l-password').value = '';
+  };
+
+  window.addEventListener('beforeunload', e => { if (hasUnsaved) { e.preventDefault(); e.returnValue = ''; } });
+});
+</script>
+</body>
+</html>

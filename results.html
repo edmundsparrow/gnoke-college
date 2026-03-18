@@ -1,0 +1,532 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Results Viewer — Admin Module</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.2/sql-wasm.js"></script>
+  <link rel="stylesheet" href="sch.css">
+  <style>
+    body { display: flex; }
+
+    /* ── Meta strip (sits below topnav) ── */
+    .meta-strip {
+      display: flex; align-items: center; gap: 24px; flex-wrap: wrap;
+      padding: 10px 24px; background: var(--card-bg);
+      border-bottom: 1px solid var(--border); min-height: 48px;
+    }
+    .meta-item { display: flex; align-items: center; gap: 8px; }
+    .meta-label {
+      font-size: 0.65rem; font-weight: 800; color: var(--text-muted);
+      text-transform: uppercase; letter-spacing: .1em;
+    }
+    .meta-value { font-size: 0.88rem; font-weight: 700; color: var(--primary); }
+    .meta-select {
+      padding: 4px 28px 4px 8px; border-radius: 5px;
+      border: 1px solid var(--border-2); background: var(--card-bg);
+      color: var(--primary); font-weight: 700; font-size: 0.84rem;
+      cursor: pointer; outline: none;
+      appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%231e613b' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+      background-repeat: no-repeat; background-position: right 8px center;
+    }
+    .meta-select:focus { border-color: var(--primary); }
+    .meta-right { margin-left: auto; display: flex; gap: 24px; }
+
+    /* ── Results area ── */
+    .results-area { flex: 1; overflow-x: auto; padding: 20px; }
+
+    /* ── Stats row above table ── */
+    .stats-row {
+      display: flex; gap: 12px; margin-bottom: 14px; flex-wrap: wrap;
+    }
+    .stat-chip {
+      background: var(--card-bg); border: 1px solid var(--border);
+      border-radius: 8px; padding: 10px 16px; display: flex;
+      flex-direction: column; align-items: center; gap: 2px;
+      box-shadow: var(--sh-sm); min-width: 90px;
+    }
+    .stat-chip-val { font-family: serif; font-size: 1.3rem; font-weight: 700; color: var(--primary); line-height: 1; }
+    .stat-chip-lbl { font-size: 0.62rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: .08em; }
+
+    /* ── Results table ── */
+    .res-wrap {
+      background: var(--card-bg); border: 1px solid var(--border);
+      border-radius: var(--r-lg); overflow: hidden; box-shadow: var(--sh-sm);
+      min-width: 860px;
+    }
+    .res-table { width: 100%; border-collapse: collapse; font-size: 0.84rem; }
+
+    /* Merged header row */
+    .res-table thead tr.hdr-group th {
+      background: var(--primary); color: #fff;
+      font-size: 0.72rem; font-weight: 700; font-family: serif;
+      padding: 8px 6px; text-align: center;
+      border: 1px solid rgba(255,255,255,.2);
+    }
+    .res-table thead tr.hdr-sub th {
+      background: #ede9df; color: #777;
+      font-size: 0.62rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: .08em; padding: 7px 6px; text-align: center;
+      border: 1px solid var(--border-2);
+    }
+
+    /* Body */
+    .res-table tbody tr { border-bottom: 1px solid var(--border); transition: background 120ms; }
+    .res-table tbody tr:last-child { border-bottom: none; }
+    .res-table tbody tr:hover { background: #fafaf7; }
+    .res-table td {
+      padding: 10px 6px; text-align: center;
+      font-size: 0.84rem; color: var(--text-mid);
+      border-right: 1px solid var(--border);
+    }
+    .res-table td:last-child { border-right: none; }
+
+    /* Name column */
+    .res-table td.td-name {
+      text-align: left; padding-left: 14px;
+      font-weight: 600; color: var(--text); white-space: nowrap;
+    }
+    /* S/N */
+    .res-table td.td-sn { color: var(--text-muted); font-size: 0.76rem; width: 40px; }
+
+    /* CAT 3 (computed) */
+    .td-cat3 { background: #f0f7f2; font-weight: 700; color: var(--primary); }
+
+    /* Total */
+    .td-total {
+      font-weight: 800; color: var(--primary);
+      background: #f0f7f2; border-left: 2px solid var(--border-2) !important;
+    }
+
+    /* Grade */
+    .td-grade { font-weight: 800; }
+    .grade-A { color: #15803d; }
+    .grade-B { color: #2563eb; }
+    .grade-C { color: #d97706; }
+    .grade-D { color: #9333ea; }
+    .grade-F { color: var(--error); }
+
+    /* Empty / placeholder row */
+    .placeholder-row td {
+      padding: 80px 20px; color: var(--text-muted);
+      font-style: italic; font-size: 0.88rem; text-align: center;
+    }
+
+    /* ── Print ── */
+    @media print {
+      @page { size: landscape; margin: .6cm; }
+      #boot-screen, .topnav, .meta-strip .meta-select,
+      #sb-overlay, .sidebar, .stats-row { display: none !important; }
+      .content-wrap { display: block !important; }
+      .results-area { padding: 0; overflow: visible; }
+      .res-wrap { min-width: 100%; border: 1px solid #000; box-shadow: none; border-radius: 0; }
+      .res-table { font-size: 8.5pt; }
+      .res-table thead tr.hdr-group th { background: #1e613b !important; color: #fff !important; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+      .res-table thead tr.hdr-sub th   { background: #eee !important; print-color-adjust: exact; }
+      .res-table td, .res-table th { border: 1px solid #aaa !important; padding: 3px 4px !important; }
+      .print-header { display: block !important; }
+      .meta-strip { border: none; padding: 0 0 6px; }
+      .meta-label, .meta-value { font-size: 8pt; }
+    }
+    .print-header {
+      display: none; font-size: 9pt; border-bottom: 2px solid #000;
+      padding-bottom: 5px; margin-bottom: 6px; text-align: center;
+    }
+    .print-header strong { font-size: 11pt; display: block; }
+  </style>
+</head>
+<body>
+
+<div id="boot-screen">
+  <div class="boot-logo">School Management</div>
+  <div class="boot-sub">Loading databases...</div>
+  <div class="spinner"></div>
+</div>
+
+<div class="content-wrap" id="app" style="display:none">
+
+  <!-- Top nav -->
+  <nav class="topnav">
+    <div class="nav-left">
+      <div class="hamburger" id="menuBtn">&#9776;</div>
+      <select id="levelSelect" class="nav-select">
+        <option value="" disabled selected>Level</option>
+        <option value="Senior">Senior</option>
+        <option value="Junior">Junior</option>
+      </select>
+      <select id="classSelect" class="nav-select" disabled>
+        <option value="" disabled selected>Class</option>
+      </select>
+      <select id="termSelect" class="nav-select">
+        <option value="FIRST">1st Term</option>
+        <option value="SECOND">2nd Term</option>
+        <option value="THIRD">3rd Term</option>
+      </select>
+      <select id="sessionSelect" class="nav-select"></select>
+    </div>
+    <div class="nav-right">
+      <button class="btn btn-secondary btn-sm" onclick="window.print()">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+        Print
+      </button>
+    </div>
+  </nav>
+
+  <!-- Meta strip -->
+  <div class="meta-strip">
+    <div class="meta-item">
+      <span class="meta-label">Subject</span>
+      <select id="subjectSelect" class="meta-select" disabled>
+        <option value="" disabled selected>— Select Subject —</option>
+        <option>English</option>
+        <option>Mathematics</option>
+        <option>Basic Science</option>
+        <option>Basic Technology</option>
+        <option>Social Studies</option>
+        <option>Civic Education</option>
+        <option>Agricultural Science</option>
+        <option>Business Studies</option>
+        <option>Home Economics</option>
+        <option>Christian Religious Studies</option>
+        <option>Islamic Religious Studies</option>
+        <option>French</option>
+        <option>Yoruba</option>
+        <option>Igbo</option>
+        <option>Hausa</option>
+        <option>Physics</option>
+        <option>Chemistry</option>
+        <option>Biology</option>
+        <option>Geography</option>
+        <option>Economics</option>
+        <option>Government</option>
+        <option>Literature</option>
+        <option>Commerce</option>
+        <option>Accounting</option>
+        <option>Further Mathematics</option>
+      </select>
+    </div>
+    <div class="meta-item">
+      <span class="meta-label">Teacher</span>
+      <span id="teacherName" class="meta-value">—</span>
+    </div>
+    <div class="meta-right">
+      <div class="meta-item">
+        <span class="meta-label">Highest</span>
+        <span id="statHigh" class="meta-value">—</span>
+      </div>
+      <div class="meta-item">
+        <span class="meta-label">Lowest</span>
+        <span id="statLow" class="meta-value">—</span>
+      </div>
+      <div class="meta-item">
+        <span class="meta-label">Average</span>
+        <span id="statAvg" class="meta-value">—</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="main-content" style="padding:0; max-width:none">
+    <div class="results-area">
+
+      <!-- Print-only header -->
+      <div class="print-header" id="print-header">
+        <strong id="ph-school">Gnoke Model College</strong>
+        <span id="ph-subtitle">—</span>
+      </div>
+
+      <!-- Grade chips -->
+      <div class="stats-row" id="stats-row" style="display:none">
+        <div class="stat-chip"><div class="stat-chip-val" id="chip-total">0</div><div class="stat-chip-lbl">Students</div></div>
+        <div class="stat-chip"><div class="stat-chip-val grade-A" id="chip-a">0</div><div class="stat-chip-lbl">A — Excellent</div></div>
+        <div class="stat-chip"><div class="stat-chip-val grade-B" id="chip-b">0</div><div class="stat-chip-lbl">B — Good</div></div>
+        <div class="stat-chip"><div class="stat-chip-val grade-C" id="chip-c">0</div><div class="stat-chip-lbl">C — Credit</div></div>
+        <div class="stat-chip"><div class="stat-chip-val grade-D" id="chip-d">0</div><div class="stat-chip-lbl">D — Pass</div></div>
+        <div class="stat-chip"><div class="stat-chip-val grade-F" id="chip-f">0</div><div class="stat-chip-lbl">F — Fail</div></div>
+      </div>
+
+      <!-- Table -->
+      <div class="res-wrap">
+        <table class="res-table">
+          <thead>
+            <tr class="hdr-group">
+              <th rowspan="2" width="40">S/N</th>
+              <th rowspan="2" style="text-align:left;padding-left:14px;min-width:170px">Student Name</th>
+              <th colspan="2">CAT Scores</th>
+              <th colspan="3">Continuous Assessment</th>
+              <th rowspan="2" width="72">Exams</th>
+              <th rowspan="2" width="80" style="background:rgba(255,255,255,.15)">Total</th>
+              <th rowspan="2" width="58">Grade</th>
+            </tr>
+            <tr class="hdr-sub">
+              <th width="56">CAT 1</th>
+              <th width="56">CAT 2</th>
+              <th width="56">Assign.</th>
+              <th width="56">C/Work</th>
+              <th width="56">Note</th>
+            </tr>
+          </thead>
+          <tbody id="resultsBody">
+            <tr class="placeholder-row">
+              <td colspan="10">Select a level, class and subject above to view results.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+    </div><!-- /results-area -->
+  </div>
+</div>
+
+<div id="toast-root"></div>
+<script src="sch.js"></script>
+<script src="menu.js"></script>
+<script>
+/* ─────────────────────────────────────────────
+   IDB config — mirrors the rest of the system
+───────────────────────────────────────────── */
+const IDB = {
+  students: { name: 'StudentRegisterStorage', store: 'db_blobs',  key: 'db' },
+  teachers: { name: 'subteach_app',           store: 'database',  key: 'db' },
+  scores:   { name: 'sch_scores',             store: 'database',  key: 'db' },
+  settings: { name: 'sch_settings',           store: 'config',    key: 'settings' },
+};
+
+let SQL = null;
+let scoresDB   = null;
+let teachersDB = null;
+
+/* ─────────────────────────────────────────────
+   Session dropdown — populated dynamically
+   (reads saved session from settings if present)
+───────────────────────────────────────────── */
+async function buildSessionSelect() {
+  const sel  = document.getElementById('sessionSelect');
+  const year = new Date().getFullYear();
+  let saved  = null;
+
+  try {
+    const cfg = await idbGet(IDB.settings.name, IDB.settings.store, IDB.settings.key);
+    if (cfg && cfg.session) saved = cfg.session;
+    if (cfg && cfg.term)    document.getElementById('termSelect').value = cfg.term;
+  } catch {}
+
+  for (let y = year - 2; y <= year + 1; y++) {
+    const v = `${y}/${y + 1}`;
+    const o = document.createElement('option');
+    o.value = o.textContent = v;
+    if (v === saved) o.selected = true;
+    sel.appendChild(o);
+  }
+  // Default to most recent if nothing saved
+  if (!saved) sel.options[sel.options.length - 1].selected = true;
+}
+
+/* ─────────────────────────────────────────────
+   Resolve teacher name from teachers DB.
+   A Subject Teacher row stores:
+     subject = e.g. "Mathematics"
+     classes = comma-separated levels e.g. "JSS1,JSS3,SS2"
+   We extract the level prefix from the selected class
+   (JSS3A → JSS3, SS2B → SS2) and check it appears
+   in the teacher's classes field.
+───────────────────────────────────────────── */
+function resolveTeacher(cls, subject) {
+  const el = document.getElementById('teacherName');
+  el.textContent = '—';
+  if (!teachersDB || !cls || !subject) return;
+
+  // Extract level: "JSS3A" → "JSS3", "SS2B" → "SS2"
+  const level = cls.replace(/[A-D]$/i, '');
+
+  try {
+    const res = teachersDB.exec(
+      `SELECT name FROM teachers
+       WHERE role='Subject Teacher' AND subject=?
+         AND (',' || classes || ',') LIKE ?
+       LIMIT 1`,
+      [subject, `%,${level},%`]
+    );
+    if (res.length && res[0].values.length) {
+      el.textContent = res[0].values[0][0];
+      return;
+    }
+    // Fallback: any teacher for this subject regardless of class
+    const res2 = teachersDB.exec(
+      "SELECT name FROM teachers WHERE role='Subject Teacher' AND subject=? LIMIT 1",
+      [subject]
+    );
+    if (res2.length && res2[0].values.length) {
+      el.textContent = res2[0].values[0][0];
+    }
+  } catch {}
+}
+
+/* ─────────────────────────────────────────────
+   Grade chips & stats reset
+───────────────────────────────────────────── */
+function resetStats() {
+  ['statHigh','statLow','statAvg'].forEach(id => {
+    document.getElementById(id).textContent = '—';
+  });
+  ['chip-total','chip-a','chip-b','chip-c','chip-d','chip-f'].forEach(id => {
+    document.getElementById(id).textContent = '0';
+  });
+  document.getElementById('stats-row').style.display = 'none';
+}
+
+function updateStats(totals, grades) {
+  if (!totals.length) { resetStats(); return; }
+  const sum = totals.reduce((a, b) => a + b, 0);
+  document.getElementById('statHigh').textContent = Math.max(...totals).toFixed(1);
+  document.getElementById('statLow').textContent  = Math.min(...totals).toFixed(1);
+  document.getElementById('statAvg').textContent  = (sum / totals.length).toFixed(1);
+  document.getElementById('chip-total').textContent = totals.length;
+  document.getElementById('chip-a').textContent = grades.A || 0;
+  document.getElementById('chip-b').textContent = grades.B || 0;
+  document.getElementById('chip-c').textContent = grades.C || 0;
+  document.getElementById('chip-d').textContent = grades.D || 0;
+  document.getElementById('chip-f').textContent = grades.F || 0;
+  document.getElementById('stats-row').style.display = 'flex';
+}
+
+/* ─────────────────────────────────────────────
+   Main render function
+───────────────────────────────────────────── */
+function renderTable() {
+  const cls  = document.getElementById('classSelect').value;
+  const subj = document.getElementById('subjectSelect').value;
+  const term = document.getElementById('termSelect').value;
+  const sess = document.getElementById('sessionSelect').value;
+  const tbody = document.getElementById('resultsBody');
+
+  if (!cls || !subj || !subj || subj === '') {
+    tbody.innerHTML = '<tr class="placeholder-row"><td colspan="10">Select a level, class and subject above to view results.</td></tr>';
+    resetStats();
+    return;
+  }
+  if (!scoresDB) {
+    tbody.innerHTML = '<tr class="placeholder-row"><td colspan="10">Scores database not found. Use the Score Compiler to enter results first.</td></tr>';
+    resetStats();
+    return;
+  }
+
+  try {
+    const res = scoresDB.exec(
+      `SELECT student_name, cat1, cat2, assignment, cw, note, exams, total, grade
+       FROM scores
+       WHERE class_level=? AND subject=? AND term=? AND session=?
+       ORDER BY student_name ASC`,
+      [cls, subj, term, sess]
+    );
+
+    if (!res.length || !res[0].values.length) {
+      tbody.innerHTML = '<tr class="placeholder-row"><td colspan="10">No results found for this selection.</td></tr>';
+      resetStats();
+      return;
+    }
+
+    const rows   = res[0].values;
+    const totals = [];
+    const grades = { A: 0, B: 0, C: 0, D: 0, F: 0 };
+
+    tbody.innerHTML = rows.map(([name, c1, c2, ass, cw, nt, ex, total, grade], i) => {
+      const t = Number(total) || 0;
+      totals.push(t);
+      if (grade in grades) grades[grade]++;
+      const gradeClass = grade in grades ? `grade-${grade}` : '';
+      return `<tr>
+        <td class="td-sn">${i + 1}</td>
+        <td class="td-name">${name}</td>
+        <td>${c1 != null ? c1 : '—'}</td>
+        <td>${c2 != null ? c2 : '—'}</td>
+        <td>${ass != null ? ass : '—'}</td>
+        <td>${cw  != null ? cw  : '—'}</td>
+        <td>${nt  != null ? nt  : '—'}</td>
+        <td>${ex  != null ? ex  : '—'}</td>
+        <td class="td-total">${t}</td>
+        <td class="td-grade ${gradeClass}">${grade || '—'}</td>
+      </tr>`;
+    }).join('');
+
+    updateStats(totals, grades);
+    updatePrintHeader(cls, subj, term, sess);
+
+  } catch (e) {
+    tbody.innerHTML = `<tr class="placeholder-row"><td colspan="10">Error reading scores: ${e.message}</td></tr>`;
+    resetStats();
+  }
+}
+
+/* ─────────────────────────────────────────────
+   Print header text
+───────────────────────────────────────────── */
+async function updatePrintHeader(cls, subj, term, sess) {
+  try {
+    const cfg = await idbGet(IDB.settings.name, IDB.settings.store, IDB.settings.key);
+    const schoolName = (cfg && cfg.schoolName) ? cfg.schoolName : 'School Management';
+    document.getElementById('ph-school').textContent = schoolName;
+  } catch {}
+  const termLabel = { FIRST: 'First Term', SECOND: 'Second Term', THIRD: 'Third Term' }[term] || term;
+  document.getElementById('ph-subtitle').textContent =
+    `${cls} — ${subj} | ${termLabel} ${sess} Results`;
+}
+
+/* ─────────────────────────────────────────────
+   Event wiring
+───────────────────────────────────────────── */
+function wireEvents() {
+  // Level → Class cascade is handled by menu.js initCascade()
+  // Extend classSelect change to enable subject dropdown + re-render
+  document.getElementById('classSelect').addEventListener('change', function () {
+    const subSel = document.getElementById('subjectSelect');
+    subSel.disabled = false;
+    subSel.value = '';
+    document.getElementById('teacherName').textContent = '—';
+    resetStats();
+    document.getElementById('resultsBody').innerHTML =
+      '<tr class="placeholder-row"><td colspan="10">Now select a subject to view results.</td></tr>';
+  });
+
+  document.getElementById('subjectSelect').addEventListener('change', function () {
+    const cls = document.getElementById('classSelect').value;
+    resolveTeacher(cls, this.value);
+    renderTable();
+  });
+
+  ['termSelect', 'sessionSelect'].forEach(id => {
+    document.getElementById(id).addEventListener('change', renderTable);
+  });
+}
+
+/* ─────────────────────────────────────────────
+   Boot
+───────────────────────────────────────────── */
+document.addEventListener('DOMContentLoaded', async () => {
+  try {
+    SQL = await initSqlJs({ locateFile: f => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.2/${f}` });
+
+    // Load scores DB
+    const scoresBlob = await idbGet(IDB.scores.name, IDB.scores.store, IDB.scores.key);
+    if (scoresBlob) scoresDB = new SQL.Database(new Uint8Array(scoresBlob));
+
+    // Load teachers DB (for teacher name lookup)
+    const teachersBlob = await idbGet(IDB.teachers.name, IDB.teachers.store, IDB.teachers.key);
+    if (teachersBlob) teachersDB = new SQL.Database(new Uint8Array(teachersBlob));
+
+  } catch (e) {
+    document.querySelector('.boot-sub').textContent = 'Failed to load. Please refresh.';
+    return;
+  }
+
+  await buildSessionSelect();
+  wireEvents();
+  hideBoot('app');
+
+  if (!scoresDB) {
+    toast.warning('No scores data', 'Use the Score Compiler to enter results first.');
+  }
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Staff Registration — Admin Module</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.2/sql-wasm.js"></script>
+  <link rel="stylesheet" href="sch.css">
+  <style>
+    body { display: flex; }
+    #extra-details { display: none; margin-top: 18px; padding-top: 18px; border-top: 1px dashed #ddd; }
+  </style>
+</head>
+<body>
+
+<div id="boot-screen">
+  <div class="boot-logo">School Management</div>
+  <div class="boot-sub">Loading database...</div>
+  <div class="spinner"></div>
+</div>
+
+<div class="content-wrap" id="app" style="display:none">
+  <nav class="topnav">
+    <div class="nav-left">
+      <div class="hamburger" id="menuBtn">&#9776;</div>
+      <select id="roleSelectNav" class="nav-select">
+        <option value="" disabled selected>— Select Role —</option>
+        <option value="Subject Teacher">Subject Teacher</option>
+        <option value="Class Teacher">Class Teacher</option>
+        <option value="Other">Other / Administrator</option>
+      </select>
+    </div>
+    <div class="nav-right">
+      <button class="btn btn-secondary btn-sm" id="export-btn">Export DB</button>
+    </div>
+  </nav>
+
+  <div class="main-content">
+    <div class="page-header">
+      <h1>Staff Registration</h1>
+      <p>Add and manage staff members. Select a role to begin.</p>
+    </div>
+
+    <div class="card card-body">
+      <div class="card-title" id="formTitle">Select a role above to get started</div>
+      <form id="staff-form">
+
+        <div id="base-fields" style="display:none">
+          <div class="form-container">
+            <div class="photo-box" title="Passport photo">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" opacity=".4"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+              <span style="font-size:.68rem;margin-top:5px;color:#bbb">Passport</span>
+            </div>
+            <div class="form-grid" style="flex:1;min-width:260px">
+              <div class="field-group full">
+                <label class="field-label">Full Name *</label>
+                <input type="text" id="s-name" class="field-input" placeholder="e.g. Ngozi Adeyemi" required>
+              </div>
+              <div class="field-group">
+                <label class="field-label">Email</label>
+                <input type="email" id="s-email" class="field-input" placeholder="ngozi@school.edu">
+              </div>
+              <div class="field-group">
+                <label class="field-label">Username *</label>
+                <input type="text" id="s-username" class="field-input" placeholder="e.g. ngozi.adeyemi" required>
+              </div>
+              <div class="field-group">
+                <label class="field-label">Password * (6 digits)</label>
+                <div class="pw-wrap">
+                  <input type="password" id="s-password" class="field-input" maxlength="6" placeholder="••••••" required>
+                  <button type="button" class="pw-eye" onclick="togglePw('s-password')">👁</button>
+                </div>
+              </div>
+              <div class="field-group">
+                <label class="field-label">Secret Word (Reset)</label>
+                <div class="pw-wrap">
+                  <input type="password" id="s-secret" class="field-input" placeholder="A memorable word">
+                  <button type="button" class="pw-eye" onclick="togglePw('s-secret')">👁</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div id="extra-details">
+          <div class="card-title" style="font-size:.85rem">Teaching Assignments</div>
+          <div class="form-grid">
+            <div class="field-group full" id="g-subject">
+              <label class="field-label">Assigned Subject *</label>
+              <select id="s-subject" class="field-input">
+                <option value="">— Select Subject —</option>
+                <option>English</option><option>Mathematics</option><option>Basic Science</option>
+                <option>Basic Technology</option><option>Social Studies</option><option>Civic Education</option>
+                <option>Agricultural Science</option><option>Business Studies</option><option>Home Economics</option>
+                <option>Christian Religious Studies</option><option>Islamic Religious Studies</option>
+                <option>French</option><option>Yoruba</option><option>Igbo</option><option>Hausa</option>
+                <option>Physics</option><option>Chemistry</option><option>Biology</option>
+                <option>Geography</option><option>Economics</option><option>Government</option>
+                <option>Literature</option><option>Commerce</option><option>Accounting</option>
+                <option>Further Mathematics</option>
+              </select>
+            </div>
+            <div class="field-group full">
+              <label class="field-label" id="classes-lbl">Classes Taught *</label>
+              <div class="classes-grid" id="classes-grid">
+                <label class="class-check"><input type="checkbox" value="JSS1"><label>JSS1</label></label>
+                <label class="class-check"><input type="checkbox" value="JSS2"><label>JSS2</label></label>
+                <label class="class-check"><input type="checkbox" value="JSS3"><label>JSS3</label></label>
+                <label class="class-check"><input type="checkbox" value="SS1"><label>SS1</label></label>
+                <label class="class-check"><input type="checkbox" value="SS2"><label>SS2</label></label>
+                <label class="class-check"><input type="checkbox" value="SS3"><label>SS3</label></label>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div id="g-other" style="display:none;margin-top:18px;padding-top:18px;border-top:1px dashed #ddd">
+          <div class="field-group">
+            <label class="field-label">Role Description *</label>
+            <textarea id="s-role-desc" class="field-input" placeholder="Describe responsibilities..."></textarea>
+          </div>
+        </div>
+
+        <div class="form-actions" id="form-actions" style="display:none">
+          <button type="button" class="btn btn-secondary" id="clear-btn">Clear</button>
+          <button type="submit" class="btn btn-primary">Save Staff Member</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<div id="toast-root"></div>
+<script src="sch.js"></script>
+<script src="menu.js"></script>
+<script>
+const IDB = { name: 'subteach_app', store: 'database', key: 'db' };
+let db = null;
+
+async function saveDB() { if (db) await idbSet(IDB.name, IDB.store, IDB.key, db.export()); }
+function countAll() {
+  try { const r = db.exec('SELECT COUNT(*) FROM teachers'); return r.length ? r[0].values[0][0] : 0; } catch { return 0; }
+}
+function updateSidebar() {
+  const n = countAll();
+  const ec = document.getElementById('sb-staff-count');
+  if (ec) ec.textContent = n;
+}
+
+function setClsType(type) {
+  document.querySelectorAll('#classes-grid input').forEach(inp => {
+    inp.type = type;
+    if (type === 'radio') inp.name = 'cls'; else inp.removeAttribute('name');
+    inp.checked = false;
+  });
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  const roleNav = document.getElementById('roleSelectNav');
+  roleNav.addEventListener('change', function () {
+    const role = this.value;
+    document.getElementById('formTitle').textContent = `Create ${role} Account`;
+    document.getElementById('base-fields').style.display = 'block';
+    document.getElementById('form-actions').style.display = 'flex';
+    const extraD = document.getElementById('extra-details');
+    const gOther = document.getElementById('g-other');
+    const subSel = document.getElementById('s-subject');
+    if (role === 'Subject Teacher') {
+      extraD.style.display = 'block'; gOther.style.display = 'none';
+      document.getElementById('g-subject').style.display = 'block';
+      subSel.disabled = false;
+      document.getElementById('classes-lbl').textContent = 'Classes Taught *';
+      setClsType('checkbox');
+    } else if (role === 'Class Teacher') {
+      extraD.style.display = 'block'; gOther.style.display = 'none';
+      document.getElementById('g-subject').style.display = 'none';
+      subSel.disabled = true; subSel.value = '';
+      document.getElementById('classes-lbl').textContent = 'Assigned Class * (pick one)';
+      setClsType('radio');
+    } else {
+      extraD.style.display = 'none'; gOther.style.display = 'block';
+    }
+  });
+  document.getElementById('clear-btn').addEventListener('click', () => {
+    document.getElementById('staff-form').reset(); setClsType('checkbox');
+  });
+});
+
+document.addEventListener('DOMContentLoaded', async () => {
+  try {
+    const SQL = await initSqlJs({ locateFile: f => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.2/${f}` });
+    const saved = await idbGet(IDB.name, IDB.store, IDB.key);
+    db = saved ? new SQL.Database(new Uint8Array(saved)) : new SQL.Database();
+    if (!saved) {
+      db.run(`CREATE TABLE teachers(
+        id INTEGER PRIMARY KEY AUTOINCREMENT, role TEXT, subject TEXT, classes TEXT,
+        name TEXT, email TEXT UNIQUE, username TEXT UNIQUE, password TEXT, secret TEXT, created_at TEXT)`);
+      await saveDB();
+    }
+  } catch(e) { document.querySelector('.boot-sub').textContent = 'Failed. Please refresh.'; return; }
+  hideBoot('app');
+  updateSidebar();
+
+  document.getElementById('staff-form').addEventListener('submit', async e => {
+    e.preventDefault();
+    const role = document.getElementById('roleSelectNav').value;
+    if (!role) { toast.error('Missing','Select a role first.'); return; }
+    const name = document.getElementById('s-name').value.trim();
+    if (!name) { toast.error('Missing','Full name required.'); return; }
+    const username = document.getElementById('s-username').value.trim();
+    if (!username) { toast.error('Missing','Username required.'); return; }
+    const password = document.getElementById('s-password').value;
+    if (!/^\d{6}$/.test(password)) { toast.error('Invalid','Password must be exactly 6 digits.'); return; }
+
+    let subject = 'N/A', classes = 'N/A';
+    if (role === 'Subject Teacher') {
+      subject = document.getElementById('s-subject').value;
+      if (!subject) { toast.error('Missing','Select a subject.'); return; }
+      const sel = [...document.querySelectorAll('#classes-grid input:checked')].map(i => i.value);
+      if (!sel.length) { toast.error('Missing','Select at least one class.'); return; }
+      classes = sel.join(',');
+    } else if (role === 'Class Teacher') {
+      const sel = [...document.querySelectorAll('#classes-grid input:checked')].map(i => i.value);
+      if (!sel.length) { toast.error('Missing','Select an assigned class.'); return; }
+      classes = sel[0];
+    } else {
+      const desc = document.getElementById('s-role-desc').value.trim();
+      if (!desc) { toast.error('Missing','Describe this role.'); return; }
+      subject = desc;
+    }
+
+    try {
+      db.run(
+        `INSERT INTO teachers(role,subject,classes,name,email,username,password,secret,created_at) VALUES(?,?,?,?,?,?,?,?,?)`,
+        [role, subject, classes, name,
+         document.getElementById('s-email').value.trim()||null,
+         username, password,
+         document.getElementById('s-secret').value.trim()||null,
+         new Date().toISOString()]
+      );
+      await saveDB();
+      toast.success('Saved', `${name} registered successfully.`);
+      document.getElementById('staff-form').reset();
+      document.getElementById('roleSelectNav').value = '';
+      document.getElementById('base-fields').style.display = 'none';
+      document.getElementById('extra-details').style.display = 'none';
+      document.getElementById('g-other').style.display = 'none';
+      document.getElementById('form-actions').style.display = 'none';
+      document.getElementById('formTitle').textContent = 'Select a role above to get started';
+      updateSidebar();
+    } catch(err) {
+      const isDup = err.message.includes('UNIQUE');
+      toast.error(isDup ? 'Duplicate entry' : 'Error', isDup ? 'Email or username already exists.' : err.message);
+    }
+  });
+
+  document.getElementById('export-btn').addEventListener('click', () => {
+    if (!db) return;
+    exportSqlDb(db, 'staff.db');
+    toast.success('Exported','staff.db downloaded.');
+  });
+});
+</script>
+</body>
+</html>

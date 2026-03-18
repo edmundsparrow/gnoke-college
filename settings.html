@@ -1,0 +1,689 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Settings — Admin Module</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.2/sql-wasm.js"></script>
+  <link rel="stylesheet" href="sch.css">
+  <style>
+    body { display: flex; }
+
+    /* ── Settings layout ── */
+    .settings-wrap {
+      display: flex; gap: 24px; align-items: flex-start;
+    }
+    .settings-nav {
+      width: 200px; flex-shrink: 0; position: sticky; top: 84px;
+    }
+    .settings-nav-item {
+      display: flex; align-items: center; gap: 9px;
+      padding: 9px 12px; border-radius: 7px; font-size: 0.85rem;
+      color: var(--text-mid); cursor: pointer; transition: all 150ms;
+      font-weight: 500; border: none; background: none; width: 100%;
+      text-align: left;
+    }
+    .settings-nav-item:hover { background: var(--input-bg); color: var(--text); }
+    .settings-nav-item.active { background: var(--primary-bg); color: var(--primary); font-weight: 700; }
+    .settings-nav-item svg { flex-shrink: 0; opacity: .7; }
+    .settings-nav-item.active svg { opacity: 1; }
+    .settings-content { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 20px; }
+
+    /* ── Settings section ── */
+    .settings-section { display: none; flex-direction: column; gap: 20px; }
+    .settings-section.visible { display: flex; }
+
+    /* ── Settings card ── */
+    .s-card {
+      background: var(--card-bg); border: 1px solid var(--border);
+      border-radius: var(--r-lg); box-shadow: var(--sh-sm); overflow: hidden;
+    }
+    .s-card-header {
+      padding: 16px 20px; border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    }
+    .s-card-title { font-weight: 700; font-size: 0.95rem; color: var(--text); }
+    .s-card-desc  { font-size: 0.78rem; color: var(--text-muted); margin-top: 2px; }
+    .s-card-body  { padding: 20px; }
+
+    /* ── Setting row ── */
+    .s-row {
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 16px; padding: 14px 0; border-bottom: 1px solid var(--border);
+    }
+    .s-row:last-child { border-bottom: none; padding-bottom: 0; }
+    .s-row:first-child { padding-top: 0; }
+    .s-row-info { flex: 1; }
+    .s-row-label { font-size: 0.88rem; font-weight: 600; color: var(--text); }
+    .s-row-hint  { font-size: 0.76rem; color: var(--text-muted); margin-top: 2px; line-height: 1.5; }
+
+    /* ── Toggle switch ── */
+    .toggle-wrap { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+    .toggle {
+      position: relative; width: 40px; height: 22px; display: inline-block;
+    }
+    .toggle input { opacity: 0; width: 0; height: 0; }
+    .toggle-slider {
+      position: absolute; cursor: pointer; inset: 0;
+      background: #ddd; border-radius: 999px; transition: background 200ms;
+    }
+    .toggle-slider::before {
+      content: ''; position: absolute; width: 16px; height: 16px;
+      left: 3px; top: 3px; background: #fff; border-radius: 50%;
+      transition: transform 200ms; box-shadow: 0 1px 3px rgba(0,0,0,.2);
+    }
+    .toggle input:checked + .toggle-slider { background: var(--primary); }
+    .toggle input:checked + .toggle-slider::before { transform: translateX(18px); }
+    .toggle-label { font-size: 0.76rem; font-weight: 600; color: var(--text-muted); width: 24px; }
+
+    /* ── Danger zone ── */
+    .danger-zone .s-card-header { border-bottom-color: #fca5a5; background: #fff5f5; }
+    .danger-zone .s-card-title  { color: var(--error); }
+    .s-row-danger { border-color: #fee2e2; }
+
+    /* ── DB status ── */
+    .db-status-row {
+      display: flex; align-items: center; gap: 10px; padding: 12px 16px;
+      border-radius: 8px; background: var(--input-bg); margin-bottom: 10px;
+    }
+    .db-status-row:last-child { margin-bottom: 0; }
+    .db-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+    .db-dot.ok  { background: var(--primary); }
+    .db-dot.missing { background: #ccc; }
+    .db-status-name  { font-size: 0.85rem; font-weight: 700; color: var(--text); flex: 1; }
+    .db-status-count { font-size: 0.78rem; color: var(--text-muted); }
+    .db-status-badge {
+      font-size: 0.68rem; font-weight: 700; padding: 2px 8px;
+      border-radius: 999px; text-transform: uppercase; letter-spacing: .04em;
+    }
+    .db-status-badge.ok      { background: #e8f5e9; color: var(--primary); }
+    .db-status-badge.missing { background: var(--input-bg); color: var(--text-muted); border: 1px solid var(--border); }
+
+    /* ── Import area ── */
+    .import-drop {
+      border: 2px dashed var(--border-2); border-radius: 8px;
+      padding: 22px; text-align: center; cursor: pointer;
+      transition: all 150ms; background: var(--input-bg);
+    }
+    .import-drop:hover, .import-drop.drag-over {
+      border-color: var(--primary); background: var(--primary-bg);
+    }
+    .import-drop p { font-size: 0.82rem; color: var(--text-muted); margin-top: 6px; }
+    .import-drop .drop-label { font-size: 0.88rem; font-weight: 600; color: var(--text); }
+    .import-drop input[type="file"] { display: none; }
+
+    /* ── Session / term selects ── */
+    .session-selects { display: flex; gap: 12px; flex-wrap: wrap; }
+    .session-selects .field-group { flex: 1; min-width: 140px; }
+
+    /* ── Responsive ── */
+    @media (max-width: 680px) {
+      .settings-wrap { flex-direction: column; }
+      .settings-nav { width: 100%; position: static; display: flex; flex-wrap: wrap; gap: 4px; }
+      .settings-nav-item { flex: 1; justify-content: center; }
+    }
+  </style>
+</head>
+<body>
+
+<div id="boot-screen">
+  <div class="boot-logo">School Management</div>
+  <div class="boot-sub">Loading settings...</div>
+  <div class="spinner"></div>
+</div>
+
+<div class="content-wrap" id="app" style="display:none">
+  <nav class="topnav">
+    <div class="nav-left">
+      <div class="hamburger" id="menuBtn">&#9776;</div>
+      <span class="nav-page-title">Settings</span>
+    </div>
+  </nav>
+
+  <div class="main-content">
+    <div class="page-header">
+      <h1>Settings</h1>
+      <p>Configure academic calendar, score components, and manage databases.</p>
+    </div>
+
+    <div class="settings-wrap">
+
+      <nav class="settings-nav">
+        <button class="settings-nav-item active" data-tab="calendar">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+          Calendar
+        </button>
+        <button class="settings-nav-item" data-tab="scores">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+          Score Setup
+        </button>
+        <button class="settings-nav-item" data-tab="databases">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
+          Databases
+        </button>
+      </nav>
+
+      <div class="settings-content">
+
+        <div class="settings-section visible" id="tab-calendar">
+          <div class="s-card">
+            <div class="s-card-header">
+              <div>
+                <div class="s-card-title">Academic Calendar</div>
+                <div class="s-card-desc">Controls the default term and session in the score compiler</div>
+              </div>
+            </div>
+            <div class="s-card-body">
+              <div class="session-selects" style="margin-bottom:20px">
+                <div class="field-group">
+                  <label class="field-label">Current Session</label>
+                  <select id="cfg-session" class="field-input"></select>
+                </div>
+                <div class="field-group">
+                  <label class="field-label">Current Term</label>
+                  <select id="cfg-term" class="field-input">
+                    <option value="FIRST">First Term</option>
+                    <option value="SECOND">Second Term</option>
+                    <option value="THIRD">Third Term</option>
+                  </select>
+                </div>
+              </div>
+              <div class="s-row">
+                <div class="s-row-info">
+                  <div class="s-row-label">Mid-term Break Reminder</div>
+                  <div class="s-row-hint">Show a reminder badge during mid-term week</div>
+                </div>
+                <label class="toggle"><input type="checkbox" id="cfg-midterm-reminder" checked><span class="toggle-slider"></span></label>
+              </div>
+              <div class="form-actions" style="margin-top:20px">
+                <button class="btn btn-primary" id="save-calendar-btn">Save Calendar</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="settings-section" id="tab-scores">
+          <div class="s-card">
+            <div class="s-card-header">
+              <div>
+                <div class="s-card-title">Score Components</div>
+                <div class="s-card-desc">Maximum marks for each CA component and exams</div>
+              </div>
+            </div>
+            <div class="s-card-body">
+              <div class="form-grid" style="gap:16px">
+                <div class="field-group">
+                  <label class="field-label">CAT 1 (max)</label>
+                  <input type="number" id="cfg-cat1" class="field-input" value="10" min="1" max="40">
+                </div>
+                <div class="field-group">
+                  <label class="field-label">CAT 2 (max)</label>
+                  <input type="number" id="cfg-cat2" class="field-input" value="10" min="1" max="40">
+                </div>
+                <div class="field-group">
+                  <label class="field-label">Assignment (max)</label>
+                  <input type="number" id="cfg-assignment" class="field-input" value="10" min="1" max="40">
+                </div>
+                <div class="field-group">
+                  <label class="field-label">Note / Project (max)</label>
+                  <input type="number" id="cfg-note" class="field-input" value="10" min="1" max="40">
+                </div>
+                <div class="field-group">
+                  <label class="field-label">Classwork (max)</label>
+                  <input type="number" id="cfg-cw" class="field-input" value="10" min="1" max="40">
+                </div>
+                <div class="field-group">
+                  <label class="field-label">Exams (max)</label>
+                  <input type="number" id="cfg-exams" class="field-input" value="50" min="1" max="100">
+                </div>
+              </div>
+              <div class="s-row" style="margin-top:16px; padding-top:16px; border-top:1px solid var(--border)">
+                <div class="s-row-info">
+                  <div class="s-row-label">CA Total Preview</div>
+                  <div class="s-row-hint">Sum of all components</div>
+                </div>
+                <span style="font-family:serif;font-size:1.4rem;font-weight:700;color:var(--primary)" id="total-preview">100</span>
+              </div>
+              <div style="margin-top:18px">
+                <div class="s-card-title" style="font-size:.85rem;margin-bottom:12px">Grade Boundaries</div>
+                <div class="form-grid" style="gap:12px">
+                  <div class="field-group">
+                    <label class="field-label">A — Excellent (min %)</label>
+                    <input type="number" id="cfg-grade-a" class="field-input" value="70" min="50" max="100">
+                  </div>
+                  <div class="field-group">
+                    <label class="field-label">B — Good (min %)</label>
+                    <input type="number" id="cfg-grade-b" class="field-input" value="60" min="40" max="99">
+                  </div>
+                  <div class="field-group">
+                    <label class="field-label">C — Credit (min %)</label>
+                    <input type="number" id="cfg-grade-c" class="field-input" value="50" min="30" max="99">
+                  </div>
+                  <div class="field-group">
+                    <label class="field-label">D — Pass (min %)</label>
+                    <input type="number" id="cfg-grade-d" class="field-input" value="40" min="1" max="99">
+                  </div>
+                </div>
+                <p style="font-size:.74rem;color:var(--text-muted);margin-top:10px">F (Fail) = below Grade D threshold.</p>
+              </div>
+              <div class="form-actions" style="margin-top:20px">
+                <button class="btn btn-primary" id="save-scores-btn">Save Score Setup</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="settings-section" id="tab-databases">
+
+          <div class="s-card">
+            <div class="s-card-header">
+              <div>
+                <div class="s-card-title">Database Status</div>
+                <div class="s-card-desc">Live status of the three IndexedDB stores</div>
+              </div>
+              <button class="btn btn-ghost btn-sm" id="refresh-db-btn">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M23 4v6h-6"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
+                Refresh
+              </button>
+            </div>
+            <div class="s-card-body" id="db-status-list">
+              <div style="color:var(--text-muted);font-size:.84rem">Checking databases…</div>
+            </div>
+          </div>
+
+          <div class="s-card">
+            <div class="s-card-header">
+              <div>
+                <div class="s-card-title">Export Databases</div>
+                <div class="s-card-desc">Download raw .db files for backup or transfer</div>
+              </div>
+            </div>
+            <div class="s-card-body">
+              <div class="s-row">
+                <div class="s-row-info">
+                  <div class="s-row-label">students.db</div>
+                  <div class="s-row-hint">All enrolled student records across every class</div>
+                </div>
+                <button class="btn btn-secondary btn-sm" id="export-students-btn">Export</button>
+              </div>
+              <div class="s-row">
+                <div class="s-row-info">
+                  <div class="s-row-label">staff.db</div>
+                  <div class="s-row-hint">All teacher / administrator accounts</div>
+                </div>
+                <button class="btn btn-secondary btn-sm" id="export-staff-btn">Export</button>
+              </div>
+              <div class="s-row">
+                <div class="s-row-info">
+                  <div class="s-row-label">scores.db</div>
+                  <div class="s-row-hint">All term scores entered by teachers</div>
+                </div>
+                <button class="btn btn-secondary btn-sm" id="export-scores-btn">Export</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="s-card">
+            <div class="s-card-header">
+              <div>
+                <div class="s-card-title">Import Database</div>
+                <div class="s-card-desc">Restore from a previously exported .db file</div>
+              </div>
+            </div>
+            <div class="s-card-body">
+              <div class="field-group" style="margin-bottom:14px">
+                <label class="field-label">Target Database</label>
+                <select id="import-target" class="field-input" style="max-width:260px">
+                  <option value="students">students.db  →  Student Register</option>
+                  <option value="teachers">staff.db  →  Staff / Teachers</option>
+                  <option value="scores">scores.db  →  Score Compiler</option>
+                </select>
+              </div>
+              <div class="import-drop" id="import-drop">
+                <input type="file" id="import-file" accept=".db">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="color:var(--text-muted)"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                <div class="drop-label" style="margin-top:8px">Drop a .db file here or click to browse</div>
+                <p>Only .db files exported from this system</p>
+              </div>
+              <div id="import-feedback" style="display:none;margin-top:12px;font-size:.82rem;padding:10px 14px;border-radius:7px;"></div>
+            </div>
+          </div>
+
+          <div class="s-card danger-zone">
+            <div class="s-card-header">
+              <div>
+                <div class="s-card-title">⚠ Danger Zone</div>
+                <div class="s-card-desc">Irreversible actions — export backups first</div>
+              </div>
+            </div>
+            <div class="s-card-body">
+              <div class="s-row s-row-danger">
+                <div class="s-row-info">
+                  <div class="s-row-label">Clear Scores Database</div>
+                  <div class="s-row-hint">Deletes all score entries for all terms. Student records are untouched.</div>
+                </div>
+                <button class="btn btn-danger btn-sm" id="clear-scores-btn">Clear Scores</button>
+              </div>
+              <div class="s-row s-row-danger">
+                <div class="s-row-info">
+                  <div class="s-row-label">Clear Student Records</div>
+                  <div class="s-row-hint">Removes all enrolled students from all classes. Cannot be undone.</div>
+                </div>
+                <button class="btn btn-danger btn-sm" id="clear-students-btn">Clear Students</button>
+              </div>
+              <div class="s-row s-row-danger">
+                <div class="s-row-info">
+                  <div class="s-row-label">Reset Everything</div>
+                  <div class="s-row-hint">Wipes all three databases and all settings. Restores factory state.</div>
+                </div>
+                <button class="btn btn-danger btn-sm" id="reset-all-btn">Reset All</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div></div></div>
+</div>
+
+<div id="toast-root"></div>
+<script src="sch.js"></script>
+<script src="menu.js"></script>
+<script>
+/* ── IDB config ── */
+const CFG_IDB = { name: 'sch_settings', store: 'config', key: 'settings' };
+const DB_CFGS = {
+  students: { idb: 'StudentRegisterStorage', store: 'db_blobs',  key: 'db' },
+  teachers: { idb: 'subteach_app',           store: 'database',  key: 'db' },
+  scores:   { idb: 'sch_scores',             store: 'database',  key: 'db' },
+};
+let SQL = null;
+
+/* ── Settings helpers ── */
+async function loadSettings() {
+  const s = await idbGet(CFG_IDB.name, CFG_IDB.store, CFG_IDB.key);
+  return s || {};
+}
+async function saveSettings(data) {
+  const existing = await loadSettings();
+  await idbSet(CFG_IDB.name, CFG_IDB.store, CFG_IDB.key, { ...existing, ...data });
+}
+
+/* ── Populate session dropdown ── */
+function buildSessionOptions() {
+  const sel = document.getElementById('cfg-session');
+  const year = new Date().getFullYear();
+  for (let y = year - 3; y <= year + 2; y++) {
+    const opt = document.createElement('option');
+    opt.value = opt.textContent = `${y}/${y + 1}`;
+    sel.appendChild(opt);
+  }
+}
+
+/* ── Fill form from saved settings ── */
+async function populateForms() {
+  const s = await loadSettings();
+  const f = (id, val) => { const el = document.getElementById(id); if (el && val !== undefined) el.value = val; };
+  const c = (id, val) => { const el = document.getElementById(id); if (el && val !== undefined) el.checked = !!val; };
+
+  // Calendar
+  if (s.session) f('cfg-session', s.session);
+  if (s.term)    f('cfg-term',    s.term);
+  c('cfg-midterm-reminder', s.midtermReminder !== false);
+
+  // Scores
+  f('cfg-cat1',       s.maxCat1       ?? 10);
+  f('cfg-cat2',       s.maxCat2       ?? 10);
+  f('cfg-assignment', s.maxAssignment ?? 10);
+  f('cfg-note',       s.maxNote       ?? 10);
+  f('cfg-cw',         s.maxCw         ?? 10);
+  f('cfg-exams',      s.maxExams      ?? 50);
+  f('cfg-grade-a',    s.gradeA        ?? 70);
+  f('cfg-grade-b',    s.gradeB        ?? 60);
+  f('cfg-grade-c',    s.gradeC        ?? 50);
+  f('cfg-grade-d',    s.gradeD        ?? 40);
+  updateTotalPreview();
+}
+
+function updateTotalPreview() {
+  const ids = ['cfg-cat1','cfg-cat2','cfg-assignment','cfg-note','cfg-cw','cfg-exams'];
+  const total = ids.reduce((s, id) => s + (parseInt(document.getElementById(id)?.value) || 0), 0);
+  document.getElementById('total-preview').textContent = total;
+}
+
+/* ── Tab switching ── */
+function initTabs() {
+  document.querySelectorAll('.settings-nav-item').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.settings-nav-item').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.settings-section').forEach(s => s.classList.remove('visible'));
+      btn.classList.add('active');
+      const sec = document.getElementById(`tab-${btn.dataset.tab}`);
+      if (sec) sec.classList.add('visible');
+    });
+  });
+}
+
+/* ── DB Status ── */
+const CLASSES_ALL = [
+  'SS1A','SS1B','SS1C','SS1D','SS2A','SS2B','SS2C','SS2D','SS3A','SS3B','SS3C','SS3D',
+  'JSS1A','JSS1B','JSS1C','JSS1D','JSS2A','JSS2B','JSS2C','JSS2D','JSS3A','JSS3B','JSS3C','JSS3D',
+];
+
+async function checkDbStatus() {
+  const list = document.getElementById('db-status-list');
+  list.innerHTML = '';
+
+  const checks = [
+    {
+      key: 'students', label: 'Students Database', idb: DB_CFGS.students,
+      count: (db) => {
+        let n = 0;
+        CLASSES_ALL.forEach(cls => {
+          try { const r = db.exec(`SELECT COUNT(*) FROM "${cls}"`); if (r.length) n += r[0].values[0][0]; } catch {}
+        });
+        return `${n} student${n !== 1 ? 's' : ''}`;
+      }
+    },
+    {
+      key: 'teachers', label: 'Staff Database', idb: DB_CFGS.teachers,
+      count: (db) => {
+        try { const r = db.exec('SELECT COUNT(*) FROM teachers'); return `${r[0]?.values[0][0] || 0} staff`; } catch { return '—'; }
+      }
+    },
+    {
+      key: 'scores', label: 'Scores Database', idb: DB_CFGS.scores,
+      count: (db) => {
+        try { const r = db.exec('SELECT COUNT(*) FROM scores'); return `${r[0]?.values[0][0] || 0} score rows`; } catch { return '—'; }
+      }
+    },
+  ];
+
+  for (const c of checks) {
+    const blob = await idbGet(c.idb.idb, c.idb.store, c.idb.key).catch(() => null);
+    const exists = !!blob;
+    let countStr = '—';
+    if (exists && SQL) {
+      try { const db = new SQL.Database(new Uint8Array(blob)); countStr = c.count(db); } catch {}
+    }
+    const row = document.createElement('div');
+    row.className = 'db-status-row';
+    row.innerHTML = `
+      <div class="db-dot ${exists ? 'ok' : 'missing'}"></div>
+      <div class="db-status-name">${c.label}</div>
+      <div class="db-status-count">${countStr}</div>
+      <span class="db-status-badge ${exists ? 'ok' : 'missing'}">${exists ? 'Ready' : 'Empty'}</span>`;
+    list.appendChild(row);
+  }
+}
+
+/* ── Export helpers ── */
+async function exportDb(cfg, filename) {
+  const blob = await idbGet(cfg.idb, cfg.store, cfg.key).catch(() => null);
+  if (!blob) { toast.warning('Nothing to export', 'Database is empty.'); return; }
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([blob], { type: 'application/octet-stream' }));
+  a.download = filename; a.click();
+  URL.revokeObjectURL(a.href);
+  toast.success('Exported', `${filename} downloaded.`);
+}
+
+/* ── Import ── */
+function initImport() {
+  const drop  = document.getElementById('import-drop');
+  const input = document.getElementById('import-file');
+  const fb    = document.getElementById('import-feedback');
+
+  drop.addEventListener('click', () => input.click());
+  drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('drag-over'); });
+  drop.addEventListener('dragleave', () => drop.classList.remove('drag-over'));
+  drop.addEventListener('drop', e => { e.preventDefault(); drop.classList.remove('drag-over'); handleFile(e.dataTransfer.files[0]); });
+  input.addEventListener('change', () => handleFile(input.files[0]));
+
+  async function handleFile(file) {
+    if (!file || !file.name.endsWith('.db')) {
+      showFb('error', 'Only .db files are accepted.'); return;
+    }
+    const target = document.getElementById('import-target').value;
+    const cfg    = DB_CFGS[target];
+    const confirmed = await confirm_modal(
+      'Import Database',
+      `Replace the existing ${target} database with "${file.name}"? This cannot be undone.`,
+      'Import', 'btn-danger'
+    );
+    if (!confirmed) return;
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      try {
+        const bytes = new Uint8Array(e.target.result);
+        if (bytes[0] !== 0x53 || bytes[1] !== 0x51 || bytes[2] !== 0x4C || bytes[3] !== 0x69) {
+          showFb('error', 'Invalid file — not a SQLite database.'); return;
+        }
+        await idbSet(cfg.idb, cfg.store, cfg.key, bytes);
+        showFb('success', `${file.name} imported successfully.`);
+        toast.success('Imported', `${target} database replaced.`);
+        await checkDbStatus();
+        input.value = '';
+      } catch (err) {
+        showFb('error', `Import failed: ${err.message}`);
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  }
+
+  function showFb(type, msg) {
+    fb.style.display = 'block';
+    fb.style.background = type === 'success' ? 'var(--primary-bg)' : 'var(--error-bg)';
+    fb.style.color       = type === 'success' ? 'var(--primary)' : 'var(--error)';
+    fb.style.border      = `1px solid ${type === 'success' ? '#c6e0cf' : '#fca5a5'}`;
+    fb.textContent = msg;
+  }
+}
+
+/* ── Danger zone ── */
+async function clearDb(cfg, label) {
+  const blob = await idbGet(cfg.idb, cfg.store, cfg.key).catch(() => null);
+  if (!blob || !SQL) { toast.warning('Already empty', `${label} has no data.`); return; }
+  const db = new SQL.Database(new Uint8Array(blob));
+  if (cfg === DB_CFGS.students) {
+    CLASSES_ALL.forEach(cls => { try { db.run(`DELETE FROM "${cls}"`); } catch {} });
+  } else {
+    try {
+      if (cfg === DB_CFGS.teachers) db.run('DELETE FROM teachers');
+      if (cfg === DB_CFGS.scores)   db.run('DELETE FROM scores');
+    } catch(e) { toast.error('Error', e.message); return; }
+  }
+  await idbSet(cfg.idb, cfg.store, cfg.key, db.export());
+  toast.success('Cleared', `${label} has been cleared.`);
+  await checkDbStatus();
+}
+
+/* ── DOMContentLoaded ── */
+document.addEventListener('DOMContentLoaded', async () => {
+  try {
+    SQL = await initSqlJs({ locateFile: f => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.2/${f}` });
+  } catch(e) {
+    document.querySelector('.boot-sub').textContent = 'Failed to load. Please refresh.'; return;
+  }
+  hideBoot('app');
+
+  buildSessionOptions();
+  initTabs();
+  initImport();
+  await populateForms();
+  await checkDbStatus();
+
+  ['cfg-cat1','cfg-cat2','cfg-assignment','cfg-note','cfg-cw','cfg-exams'].forEach(id => {
+    document.getElementById(id).addEventListener('input', updateTotalPreview);
+  });
+
+  // Save calendar
+  document.getElementById('save-calendar-btn').addEventListener('click', async () => {
+    await saveSettings({
+      session:         document.getElementById('cfg-session').value,
+      term:            document.getElementById('cfg-term').value,
+      midtermReminder: document.getElementById('cfg-midterm-reminder').checked,
+    });
+    toast.success('Saved', 'Calendar settings updated.');
+  });
+
+  // Save score setup
+  document.getElementById('save-scores-btn').addEventListener('click', async () => {
+    const gradeA = parseInt(document.getElementById('cfg-grade-a').value);
+    const gradeB = parseInt(document.getElementById('cfg-grade-b').value);
+    const gradeC = parseInt(document.getElementById('cfg-grade-c').value);
+    const gradeD = parseInt(document.getElementById('cfg-grade-d').value);
+    if (gradeA <= gradeB || gradeB <= gradeC || gradeC <= gradeD) {
+      toast.error('Invalid grades', 'Grade thresholds must be strictly descending.'); return;
+    }
+    await saveSettings({
+      maxCat1: parseInt(document.getElementById('cfg-cat1').value),
+      maxCat2: parseInt(document.getElementById('cfg-cat2').value),
+      maxAssignment: parseInt(document.getElementById('cfg-assignment').value),
+      maxNote: parseInt(document.getElementById('cfg-note').value),
+      maxCw:   parseInt(document.getElementById('cfg-cw').value),
+      maxExams: parseInt(document.getElementById('cfg-exams').value),
+      gradeA, gradeB, gradeC, gradeD,
+    });
+    toast.success('Saved', 'Score setup updated.');
+  });
+
+  document.getElementById('refresh-db-btn').addEventListener('click', async () => {
+    await checkDbStatus();
+    toast.info('Refreshed', 'Database status updated.');
+  });
+
+  document.getElementById('export-students-btn').addEventListener('click', () => exportDb(DB_CFGS.students, 'students.db'));
+  document.getElementById('export-staff-btn').addEventListener('click',    () => exportDb(DB_CFGS.teachers, 'staff.db'));
+  document.getElementById('export-scores-btn').addEventListener('click',   () => exportDb(DB_CFGS.scores,   'scores.db'));
+
+  document.getElementById('clear-scores-btn').addEventListener('click', async () => {
+    if (!await confirm_modal('Clear Scores', 'Delete all score records permanently?', 'Clear', 'btn-danger')) return;
+    await clearDb(DB_CFGS.scores, 'Scores database');
+  });
+  document.getElementById('clear-students-btn').addEventListener('click', async () => {
+    if (!await confirm_modal('Clear Students', 'Remove all enrolled students?', 'Clear', 'btn-danger')) return;
+    await clearDb(DB_CFGS.students, 'Student records');
+  });
+  document.getElementById('reset-all-btn').addEventListener('click', async () => {
+    if (!await confirm_modal('Reset Everything', 'This wipes ALL data. Are you sure?', 'Reset Everything', 'btn-danger')) return;
+    for (const [, cfg] of Object.entries(DB_CFGS)) {
+      const blob = await idbGet(cfg.idb, cfg.store, cfg.key).catch(() => null);
+      if (blob && SQL) {
+        const db = new SQL.Database(new Uint8Array(blob));
+        try {
+          if (cfg === DB_CFGS.students) CLASSES_ALL.forEach(cls => { try { db.run(`DELETE FROM "${cls}"`); } catch {} });
+          if (cfg === DB_CFGS.teachers) db.run('DELETE FROM teachers');
+          if (cfg === DB_CFGS.scores)   db.run('DELETE FROM scores');
+          await idbSet(cfg.idb, cfg.store, cfg.key, db.export());
+        } catch {}
+      }
+    }
+    await idbSet(CFG_IDB.name, CFG_IDB.store, CFG_IDB.key, {});
+    toast.success('Reset complete', 'All data cleared.');
+    await checkDbStatus();
+    await populateForms();
+  });
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Enrolled Students — Admin Module</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.2/sql-wasm.js"></script>
+  <link rel="stylesheet" href="sch.css">
+  <style> body { display: flex; } </style>
+</head>
+<body>
+
+<div id="boot-screen">
+  <div class="boot-logo">School Management</div>
+  <div class="boot-sub">Loading database...</div>
+  <div class="spinner"></div>
+</div>
+
+<div class="content-wrap" id="app" style="display:none">
+  <nav class="topnav">
+    <div class="nav-left">
+      <div class="hamburger" id="menuBtn">&#9776;</div>
+      <select id="levelSelect" class="nav-select">
+        <option value="" disabled selected>Level</option>
+        <option value="Senior">Senior</option>
+        <option value="Junior">Junior</option>
+      </select>
+      <select id="classSelect" class="nav-select" disabled>
+        <option value="" disabled selected>Class</option>
+      </select>
+    </div>
+    <div class="nav-right">
+      <button class="btn btn-secondary btn-sm" id="export-btn">Export DB</button>
+    </div>
+  </nav>
+
+  <div class="main-content">
+    <div class="page-header">
+      <h1 id="dynamicTitle">All Enrolled Students</h1>
+      <p>Select a level and class to browse students.</p>
+    </div>
+
+    <div class="table-card">
+      <div class="table-toolbar">
+        <div class="table-toolbar-left">
+          <span class="table-label" id="tableClassLabel">Records</span>
+          <span class="badge-count" id="student-badge">0</span>
+        </div>
+        <div class="search-box">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+          <input type="text" id="search-input" placeholder="Search students...">
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>#</th><th>Class</th><th>ID</th><th>Name</th><th>Sex</th><th>DOB</th><th>Guardian</th><th>Phone</th><th>Actions</th></tr>
+          </thead>
+          <tbody id="students-body">
+            <tr><td colspan="9" class="empty-row">Select a level and class above.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="toast-root"></div>
+<script src="sch.js"></script>
+<script src="menu.js"></script>
+<script>
+const IDB_S = { name: 'StudentRegisterStorage', store: 'db_blobs', key: 'db' };
+const CLASSES = {
+  Senior: ['SS1A','SS1B','SS1C','SS1D','SS2A','SS2B','SS2C','SS2D','SS3A','SS3B','SS3C','SS3D'],
+  Junior: ['JSS1A','JSS1B','JSS1C','JSS1D','JSS2A','JSS2B','JSS2C','JSS2D','JSS3A','JSS3B','JSS3C','JSS3D'],
+};
+let SQL = null, studentsDB = null, currentClass = null;
+
+async function persist() {
+  if (studentsDB) await idbSet(IDB_S.name, IDB_S.store, IDB_S.key, studentsDB.export());
+}
+
+function updateTotals() {
+  if (!studentsDB) return;
+  let total = 0;
+  [...CLASSES.Senior,...CLASSES.Junior].forEach(cls => {
+    try { const r = studentsDB.exec(`SELECT COUNT(*) FROM "${cls}"`); if (r.length) total += r[0].values[0][0]; } catch {}
+  });
+  const el = document.getElementById('sb-student-total');
+  if (el) el.textContent = total;
+  idbGet('subteach_app','database','db').then(blob => {
+    if (!blob || !SQL) return;
+    const db2 = new SQL.Database(new Uint8Array(blob));
+    const r = db2.exec('SELECT COUNT(*) FROM teachers');
+    const es = document.getElementById('sb-staff-count');
+    if (r.length && es) es.textContent = r[0].values[0][0];
+  }).catch(()=>{});
+}
+
+function renderTable(q = '') {
+  const tbody = document.getElementById('students-body');
+  const badge = document.getElementById('student-badge');
+  if (!studentsDB || !currentClass) {
+    tbody.innerHTML = '<tr><td colspan="9" class="empty-row">Select a level and class above.</td></tr>';
+    badge.textContent = '0'; return;
+  }
+  try {
+    let sql = `SELECT id,name,sex,dob,guardian,phone FROM "${currentClass}" WHERE 1=1`;
+    const p = [];
+    if (q) { sql += ' AND (name LIKE ? OR id LIKE ?)'; p.push(`%${q}%`,`%${q}%`); }
+    sql += ' ORDER BY name ASC';
+    const res = studentsDB.exec(sql, p);
+    if (!res.length || !res[0].values.length) {
+      badge.textContent = '0';
+      tbody.innerHTML = '<tr><td colspan="9" class="empty-row">No students found.</td></tr>'; return;
+    }
+    badge.textContent = res[0].values.length;
+    tbody.innerHTML = res[0].values.map(([id,name,sex,dob,guardian,phone], i) => `
+      <tr>
+        <td>${i+1}</td><td>${currentClass}</td>
+        <td style="font-size:.78rem;color:#999">${id}</td>
+        <td>${name}</td>
+        <td><span class="sex-badge ${sex==='F'?'sex-f':'sex-m'}">${sex||'?'}</span></td>
+        <td>${dob||'—'}</td><td>${guardian||'—'}</td><td>${phone||'—'}</td>
+        <td><div class="tbl-actions">
+          <button onclick="editStudent('${id}')">Edit</button>
+          <button class="danger" onclick="deleteStudent('${id}','${name.replace(/'/g,"\\'")}')">Delete</button>
+        </div></td>
+      </tr>`).join('');
+  } catch(e) {
+    tbody.innerHTML = `<tr><td colspan="9" class="empty-row">Table not found for ${currentClass}.</td></tr>`;
+    badge.textContent = '0';
+  }
+}
+
+async function deleteStudent(id, name) {
+  if (!await confirm_modal('Delete Student', `Remove "${name}" from ${currentClass}?`)) return;
+  studentsDB.run(`DELETE FROM "${currentClass}" WHERE id=?`, [id]);
+  await persist(); updateTotals();
+  renderTable(document.getElementById('search-input').value);
+  toast.success('Deleted', `${name} removed.`);
+}
+
+function editStudent(id) {
+  try {
+    const res = studentsDB.exec(`SELECT id,name,sex,dob,guardian,phone,nationality FROM "${currentClass}" WHERE id=?`,[id]);
+    if (!res.length) return;
+    const [eid,ename,esex,edob,eguardian,ephone,enat] = res[0].values[0];
+    const ov = document.createElement('div'); ov.className = 'overlay';
+    ov.innerHTML = `<div class="modal modal-lg">
+      <h3>Edit Student</h3>
+      <div class="form-grid">
+        <div class="field-group full"><label class="field-label">Full Name *</label><input type="text" id="e-name" class="field-input" value="${ename}"></div>
+        <div class="field-group"><label class="field-label">Sex</label>
+          <select id="e-sex" class="field-input">
+            <option value="M"${esex==='M'?' selected':''}>Male</option>
+            <option value="F"${esex==='F'?' selected':''}>Female</option>
+          </select></div>
+        <div class="field-group"><label class="field-label">Date of Birth</label><input type="date" id="e-dob" class="field-input" value="${edob||''}"></div>
+        <div class="field-group full"><label class="field-label">Guardian Name</label><input type="text" id="e-guardian" class="field-input" value="${eguardian||''}"></div>
+        <div class="field-group"><label class="field-label">Phone</label><input type="tel" id="e-phone" class="field-input" value="${ephone||''}"></div>
+        <div class="field-group"><label class="field-label">Nationality</label>
+          <select id="e-nationality" class="field-input">
+            <option${enat==='Nigeria'?' selected':''}>Nigeria</option>
+            <option${enat==='Ghana'?' selected':''}>Ghana</option>
+            <option${enat==='Other'?' selected':''}>Other</option>
+          </select></div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" id="m-cancel">Cancel</button>
+        <button class="btn btn-primary" id="m-save">Save Changes</button>
+      </div></div>`;
+    document.body.appendChild(ov);
+    ov.onclick = e => { if (e.target === ov) ov.remove(); };
+    ov.querySelector('#m-cancel').onclick = () => ov.remove();
+    ov.querySelector('#m-save').onclick = async () => {
+      const nn = document.getElementById('e-name').value.trim();
+      if (!nn) { toast.error('Missing','Name is required.'); return; }
+      studentsDB.run(
+        `UPDATE "${currentClass}" SET name=?,sex=?,dob=?,guardian=?,phone=?,nationality=? WHERE id=?`,
+        [nn, document.getElementById('e-sex').value,
+         document.getElementById('e-dob').value||null,
+         document.getElementById('e-guardian').value.trim()||null,
+         document.getElementById('e-phone').value.trim()||null,
+         document.getElementById('e-nationality').value, eid]
+      );
+      await persist();
+      toast.success('Updated', `${nn} updated.`);
+      ov.remove(); renderTable(document.getElementById('search-input').value);
+    };
+  } catch(e) { toast.error('Error', e.message); }
+}
+
+document.addEventListener('DOMContentLoaded', async () => {
+  try {
+    SQL = await initSqlJs({ locateFile: f => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.2/${f}` });
+    const blob = await idbGet(IDB_S.name, IDB_S.store, IDB_S.key);
+    studentsDB = blob ? new SQL.Database(new Uint8Array(blob)) : new SQL.Database();
+  } catch(e) {
+    document.querySelector('.boot-sub').textContent = 'Failed to load. Please refresh.'; return;
+  }
+  hideBoot('app');
+  updateTotals();
+
+  document.getElementById('classSelect').addEventListener('change', function () {
+    currentClass = this.value; renderTable();
+  });
+  document.getElementById('search-input').addEventListener('input', e => renderTable(e.target.value));
+  document.getElementById('export-btn').addEventListener('click', () => {
+    if (!studentsDB) { toast.warning('Nothing to export',''); return; }
+    exportSqlDb(studentsDB, 'students.db');
+    toast.success('Exported','students.db downloaded.');
+  });
+});
+</script>
+</body>
+</html>

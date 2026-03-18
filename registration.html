@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Student Registration — Admin Module</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.2/sql-wasm.js"></script>
+  <link rel="stylesheet" href="sch.css">
+  <style>
+    body { display: flex; }
+    .divider { margin: 18px 0; border: none; border-top: 1px dashed #ddd; }
+  </style>
+</head>
+<body>
+
+<div id="boot-screen">
+  <div class="boot-logo">School Management</div>
+  <div class="boot-sub">Loading database...</div>
+  <div class="spinner"></div>
+</div>
+
+<div class="content-wrap" id="app" style="display:none">
+  <nav class="topnav">
+    <div class="nav-left">
+      <div class="hamburger" id="menuBtn">&#9776;</div>
+      <select id="levelSelect" class="nav-select">
+        <option value="" disabled selected>Level</option>
+        <option value="Senior">Senior</option>
+        <option value="Junior">Junior</option>
+      </select>
+      <select id="classSelect" class="nav-select" disabled>
+        <option value="" disabled selected>Class</option>
+      </select>
+    </div>
+    <div class="nav-right">
+      <button class="btn btn-secondary btn-sm" id="export-btn">Export DB</button>
+    </div>
+  </nav>
+
+  <div class="main-content">
+    <div class="page-header">
+      <h1 id="dynamicTitle">Student Registration</h1>
+      <p>Select a level and class, then add students below.</p>
+    </div>
+
+    <div class="card card-body">
+      <div class="card-title">Add New Student</div>
+      <form id="reg-form">
+        <div class="form-container">
+          <div class="photo-box" title="Passport photo (coming soon)">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" opacity=".4"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+            <span style="font-size:.68rem;margin-top:5px;color:#bbb">Passport</span>
+          </div>
+          <div class="form-grid" style="flex:1;min-width:260px">
+            <div class="field-group full">
+              <label class="field-label">Full Name *</label>
+              <input type="text" id="r-name" class="field-input" placeholder="e.g. Adaeze Okonkwo" required>
+            </div>
+            <div class="field-group">
+              <label class="field-label">Sex *</label>
+              <select id="r-sex" class="field-input">
+                <option value="M">Male</option>
+                <option value="F">Female</option>
+              </select>
+            </div>
+            <div class="field-group">
+              <label class="field-label">Date of Birth</label>
+              <input type="date" id="r-dob" class="field-input">
+            </div>
+            <div class="field-group full">
+              <label class="field-label">Guardian Name</label>
+              <input type="text" id="r-guardian" class="field-input" placeholder="Guardian / Parent name">
+            </div>
+            <div class="field-group">
+              <label class="field-label">Phone</label>
+              <input type="tel" id="r-phone" class="field-input" placeholder="080...">
+            </div>
+            <div class="field-group">
+              <label class="field-label">Nationality</label>
+              <select id="r-nationality" class="field-input">
+                <option>Nigeria</option>
+                <option>Ghana</option>
+                <option>Other</option>
+              </select>
+            </div>
+          </div>
+        </div>
+        <div class="form-actions">
+          <button type="button" class="btn btn-secondary" id="clear-btn">Clear</button>
+          <button type="submit" class="btn btn-primary" id="save-btn" disabled>Save Student</button>
+        </div>
+      </form>
+    </div>
+
+    <div style="margin-top:24px" id="recent-section" style="display:none">
+      <div class="table-card">
+        <div class="table-toolbar">
+          <div class="table-toolbar-left">
+            <span class="table-label" id="tableClassLabel">Records</span>
+            <span class="badge-count" id="student-badge">0</span>
+          </div>
+          <div class="search-box">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+            <input type="text" id="search-input" placeholder="Search students...">
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>#</th><th>ID</th><th>Name</th><th>Sex</th><th>DOB</th><th>Guardian</th><th>Phone</th><th>Actions</th></tr>
+            </thead>
+            <tbody id="reg-table-body">
+              <tr><td colspan="8" class="empty-row">No students registered yet in this class.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="toast-root"></div>
+<script src="sch.js"></script>
+<script src="menu.js"></script>
+<script>
+const IDB_S = { name: 'StudentRegisterStorage', store: 'db_blobs', key: 'db' };
+const CLASSES = {
+  Senior: ['SS1A','SS1B','SS1C','SS1D','SS2A','SS2B','SS2C','SS2D','SS3A','SS3B','SS3C','SS3D'],
+  Junior: ['JSS1A','JSS1B','JSS1C','JSS1D','JSS2A','JSS2B','JSS2C','JSS2D','JSS3A','JSS3B','JSS3C','JSS3D'],
+};
+let SQL = null, studentsDB = null, currentClass = null;
+
+async function persist() {
+  if (studentsDB) await idbSet(IDB_S.name, IDB_S.store, IDB_S.key, studentsDB.export());
+}
+function ensureTable(cls) {
+  studentsDB.run(`CREATE TABLE IF NOT EXISTS "${cls}"(
+    id TEXT PRIMARY KEY, name TEXT NOT NULL, sex TEXT, dob TEXT,
+    guardian TEXT, phone TEXT, nationality TEXT, created_at TEXT)`);
+}
+function genId(cls) {
+  return `${cls.replace(/\s/g,'').toUpperCase()}-${Math.floor(1000+Math.random()*9000)}`;
+}
+
+function updateTotals() {
+  if (!studentsDB) return;
+  let total = 0;
+  [...CLASSES.Senior, ...CLASSES.Junior].forEach(cls => {
+    try { const r = studentsDB.exec(`SELECT COUNT(*) FROM "${cls}"`); if (r.length) total += r[0].values[0][0]; } catch {}
+  });
+  const el = document.getElementById('sb-student-total');
+  if (el) el.textContent = total;
+  idbGet('subteach_app','database','db').then(blob => {
+    if (!blob) return;
+    const db2 = new SQL.Database(new Uint8Array(blob));
+    const r = db2.exec('SELECT COUNT(*) FROM teachers');
+    const es = document.getElementById('sb-staff-count');
+    if (r.length && es) es.textContent = r[0].values[0][0];
+  }).catch(()=>{});
+}
+
+function renderTable(q = '') {
+  const tbody = document.getElementById('reg-table-body');
+  const badge = document.getElementById('student-badge');
+  if (!studentsDB || !currentClass) {
+    tbody.innerHTML = '<tr><td colspan="8" class="empty-row">Select a class to see students.</td></tr>';
+    return;
+  }
+  try {
+    ensureTable(currentClass);
+    let sql = `SELECT id,name,sex,dob,guardian,phone FROM "${currentClass}" WHERE 1=1`;
+    const p = [];
+    if (q) { sql += ' AND (name LIKE ? OR id LIKE ?)'; p.push(`%${q}%`,`%${q}%`); }
+    sql += ' ORDER BY name ASC';
+    const res = studentsDB.exec(sql, p);
+    if (!res.length || !res[0].values.length) {
+      badge.textContent = '0';
+      tbody.innerHTML = '<tr><td colspan="8" class="empty-row">No students in this class yet.</td></tr>';
+      return;
+    }
+    badge.textContent = res[0].values.length;
+    tbody.innerHTML = res[0].values.map(([id,name,sex,dob,guardian,phone], i) => `
+      <tr>
+        <td>${i+1}</td>
+        <td style="font-size:.78rem;color:#999">${id}</td>
+        <td>${name}</td>
+        <td><span class="sex-badge ${sex==='F'?'sex-f':'sex-m'}">${sex||'?'}</span></td>
+        <td>${dob||'—'}</td><td>${guardian||'—'}</td><td>${phone||'—'}</td>
+        <td><div class="tbl-actions">
+          <button class="danger" onclick="deleteStudent('${id}','${name.replace(/'/g,"\\'")}')">Delete</button>
+        </div></td>
+      </tr>`).join('');
+  } catch(e) {
+    tbody.innerHTML = `<tr><td colspan="8" class="empty-row">Error: ${e.message}</td></tr>`;
+  }
+}
+
+async function deleteStudent(id, name) {
+  if (!await confirm_modal('Delete Student', `Remove "${name}" from ${currentClass}?`)) return;
+  studentsDB.run(`DELETE FROM "${currentClass}" WHERE id=?`, [id]);
+  await persist(); updateTotals();
+  renderTable(document.getElementById('search-input').value);
+  toast.success('Deleted', `${name} removed.`);
+}
+
+document.addEventListener('DOMContentLoaded', async () => {
+  try {
+    SQL = await initSqlJs({ locateFile: f => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.2/${f}` });
+    const blob = await idbGet(IDB_S.name, IDB_S.store, IDB_S.key);
+    studentsDB = blob ? new SQL.Database(new Uint8Array(blob)) : new SQL.Database();
+    if (!blob) await persist();
+  } catch(e) {
+    document.querySelector('.boot-sub').textContent = 'Failed to load. Please refresh.'; return;
+  }
+  hideBoot('app');
+  updateTotals();
+
+  const classSel = document.getElementById('classSelect');
+  classSel.addEventListener('change', function () {
+    currentClass = this.value;
+    document.getElementById('save-btn').disabled = false;
+    document.getElementById('recent-section').style.display = 'block';
+    renderTable();
+  });
+
+  document.getElementById('search-input').addEventListener('input', e => renderTable(e.target.value));
+
+  document.getElementById('reg-form').addEventListener('submit', async e => {
+    e.preventDefault();
+    if (!currentClass) { toast.warning('No class selected','Select a level and class first.'); return; }
+    const name = document.getElementById('r-name').value.trim();
+    if (!name) { toast.error('Missing','Full name is required.'); return; }
+    const id = genId(currentClass);
+    try {
+      ensureTable(currentClass);
+      studentsDB.run(
+        `INSERT INTO "${currentClass}"(id,name,sex,dob,guardian,phone,nationality,created_at) VALUES(?,?,?,?,?,?,?,?)`,
+        [id, name, document.getElementById('r-sex').value,
+         document.getElementById('r-dob').value||null,
+         document.getElementById('r-guardian').value.trim()||null,
+         document.getElementById('r-phone').value.trim()||null,
+         document.getElementById('r-nationality').value,
+         new Date().toISOString()]
+      );
+      await persist();
+      toast.success('Saved', `${name} registered (ID: ${id}).`);
+      document.getElementById('reg-form').reset();
+      document.getElementById('save-btn').disabled = false;
+      updateTotals();
+      renderTable(document.getElementById('search-input').value);
+    } catch(err) { toast.error('Error', err.message); }
+  });
+
+  document.getElementById('clear-btn').addEventListener('click', () => document.getElementById('reg-form').reset());
+
+  document.getElementById('export-btn').addEventListener('click', () => {
+    if (!studentsDB) { toast.warning('Nothing to export',''); return; }
+    exportSqlDb(studentsDB, 'students.db');
+    toast.success('Exported','students.db downloaded.');
+  });
+});
+</script>
+</body>
+</html>

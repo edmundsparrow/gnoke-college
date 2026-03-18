@@ -1,0 +1,623 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>About — Gnoke College</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.2/sql-wasm.js"></script>
+  <link rel="stylesheet" href="sch.css">
+  <style>
+    body { display: flex; }
+
+    /* ── About-specific layout ── */
+    .about-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin-top: 0;
+    }
+    @media (max-width: 768px) {
+      .about-grid { grid-template-columns: 1fr; }
+    }
+
+    .about-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: var(--r-lg);
+      padding: 22px 24px;
+      box-shadow: var(--sh-sm);
+    }
+    .about-card.full { grid-column: 1 / -1; }
+
+    .about-card-title {
+      font-size: 0.82rem;
+      font-weight: 700;
+      color: var(--text-mid);
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      margin-bottom: 14px;
+      display: flex;
+      align-items: center;
+      gap: 7px;
+    }
+    .about-card-title span { font-size: 1rem; }
+
+    /* ── App identity block ── */
+    .app-identity {
+      display: flex;
+      align-items: flex-start;
+      gap: 16px;
+      margin-bottom: 16px;
+    }
+    .app-icon {
+      width: 54px; height: 54px;
+      background: var(--primary-bg);
+      border-radius: 12px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.6rem;
+      flex-shrink: 0;
+      border: 1px solid rgba(30,97,59,.12);
+    }
+    .app-identity-text h2 {
+      font-family: serif;
+      font-size: 1.25rem;
+      font-weight: 700;
+      color: var(--text);
+      margin: 0 0 2px;
+    }
+    .app-identity-text .app-tagline {
+      font-size: 0.78rem;
+      color: var(--text-muted);
+      letter-spacing: 0.03em;
+    }
+    .app-desc {
+      font-size: 0.86rem;
+      color: var(--text-mid);
+      line-height: 1.7;
+    }
+    .app-desc strong { color: var(--text); font-weight: 600; }
+
+    /* ── Privacy badge ── */
+    .privacy-row {
+      display: flex;
+      gap: 8px;
+      margin-top: 16px;
+      flex-wrap: wrap;
+    }
+    .privacy-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 0.68rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      background: var(--primary-bg);
+      color: var(--primary);
+      border: 1px solid rgba(30,97,59,.15);
+    }
+
+    /* ── Tech table ── */
+    .tech-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    .tech-table tr {
+      border-bottom: 1px solid var(--border);
+    }
+    .tech-table tr:last-child {
+      border-bottom: none;
+    }
+    .tech-table td {
+      padding: 9px 0;
+      font-size: 0.83rem;
+      vertical-align: top;
+    }
+    .tech-table td:first-child {
+      color: var(--text-muted);
+      font-size: 0.72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      width: 38%;
+      padding-right: 12px;
+    }
+    .tech-table td:last-child {
+      color: var(--text);
+      font-weight: 500;
+    }
+    .tech-val-mono {
+      font-family: 'Courier New', monospace;
+      font-size: 0.78rem;
+      color: var(--primary);
+      background: var(--primary-bg);
+      padding: 1px 6px;
+      border-radius: 4px;
+    }
+
+    /* ── Database status row ── */
+    .db-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 12px;
+      border-radius: 8px;
+      background: var(--input-bg);
+      border: 1px solid var(--border);
+      margin-bottom: 8px;
+    }
+    .db-row:last-child { margin-bottom: 0; }
+    .db-row-name {
+      font-size: 0.82rem;
+      font-weight: 600;
+      color: var(--text);
+    }
+    .db-row-detail {
+      font-size: 0.72rem;
+      color: var(--text-muted);
+      margin-top: 1px;
+    }
+    .db-status-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: #ccc;
+      flex-shrink: 0;
+    }
+    .db-status-dot.ok  { background: var(--primary); }
+    .db-status-dot.empty { background: #e0c97a; }
+
+    /* ── Author card ── */
+    .author-name {
+      font-family: serif;
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: var(--text);
+      margin-bottom: 4px;
+    }
+    .author-role {
+      font-size: 0.78rem;
+      color: var(--text-muted);
+      margin-bottom: 14px;
+    }
+    .author-links {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    /* ── Version card ── */
+    .version-row {
+      display: flex;
+      align-items: baseline;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+    .version-number {
+      font-family: 'Courier New', monospace;
+      font-size: 1.4rem;
+      font-weight: 700;
+      color: var(--primary);
+    }
+    .version-label {
+      font-size: 0.72rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+    .version-hint {
+      font-size: 0.8rem;
+      color: var(--text-mid);
+      line-height: 1.6;
+    }
+
+    /* ── License card ── */
+    .license-name {
+      font-size: 0.92rem;
+      font-weight: 700;
+      color: var(--text);
+      margin-bottom: 8px;
+    }
+    .license-desc {
+      font-size: 0.82rem;
+      color: var(--text-mid);
+      line-height: 1.7;
+    }
+    .license-copy {
+      font-size: 0.68rem;
+      color: var(--text-muted);
+      margin-top: 14px;
+      font-family: 'Courier New', monospace;
+    }
+
+    /* ── Feature list ── */
+    .feature-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .feature-list li {
+      display: flex;
+      align-items: flex-start;
+      gap: 9px;
+      font-size: 0.84rem;
+      color: var(--text-mid);
+      line-height: 1.5;
+    }
+    .feature-list li::before {
+      content: '';
+      display: block;
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: var(--primary);
+      flex-shrink: 0;
+      margin-top: 6px;
+    }
+
+    /* ── Support card ── */
+    .support-text {
+      font-size: 0.84rem;
+      color: var(--text-mid);
+      line-height: 1.7;
+      margin-bottom: 14px;
+    }
+  </style>
+</head>
+<body>
+
+<!-- Boot screen hides immediately for this static page -->
+<div id="boot-screen">
+  <div class="boot-logo">School Management</div>
+  <div class="boot-sub">Loading…</div>
+  <div class="spinner"></div>
+</div>
+
+<div class="content-wrap" id="app" style="display:none">
+  <nav class="topnav">
+    <div class="nav-left">
+      <div class="hamburger" id="menuBtn">&#9776;</div>
+      <span class="nav-page-title">About</span>
+    </div>
+    <div class="nav-right">
+      <button class="btn btn-secondary btn-sm" id="btn-sync" title="Cloud backup — coming soon" onclick="showSyncNote()">☁ Sync</button>
+    </div>
+  </nav>
+
+  <div class="main-content">
+    <div class="page-header" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
+      <div>
+        <h1>About</h1>
+        <p>Gnoke College — School Management System · v1.0</p>
+      </div>
+      <button class="btn btn-ghost" id="btn-check-update">🔄 Check for Updates</button>
+    </div>
+
+    <div class="about-grid">
+
+      <!-- ── App Identity ── -->
+      <div class="about-card full">
+        <div class="app-identity">
+          <div class="app-icon">🏫</div>
+          <div class="app-identity-text">
+            <h2>Gnoke College</h2>
+            <div class="app-tagline">SCHOOL MANAGEMENT SYSTEM · v1.0</div>
+          </div>
+        </div>
+        <p class="app-desc">
+          A <strong>complete, offline-first school management system</strong> for Nigerian secondary schools.
+          Manage student enrolments, staff accounts, subject assignments, and academic results —
+          all from a single admin panel, without ever connecting to a server.
+          <br><br>
+          Every record lives on this device in a local SQLite database.
+          Your data never leaves the machine.
+        </p>
+        <div class="privacy-row">
+          <span class="privacy-badge">⚡ Offline-first</span>
+          <span class="privacy-badge">🔒 No server</span>
+          <span class="privacy-badge">📵 No account</span>
+          <span class="privacy-badge">🚫 No tracking</span>
+        </div>
+      </div>
+
+      <!-- ── Features ── -->
+      <div class="about-card">
+        <div class="about-card-title"><span>✨</span> What It Does</div>
+        <ul class="feature-list">
+          <li>Register and manage Junior &amp; Senior secondary students</li>
+          <li>Assign students to classes (JSS1–SS3, sections A–D)</li>
+          <li>Create Subject Teacher, Class Teacher, and Admin accounts</li>
+          <li>Record CAT scores, assignments, notes, coursework, and exams</li>
+          <li>View and filter per-class results by term and session</li>
+          <li>Export all databases as <code>.db</code> files for backup</li>
+          <li>Works completely offline — no internet required after first load</li>
+        </ul>
+      </div>
+
+      <!-- ── Tech Stack ── -->
+      <div class="about-card">
+        <div class="about-card-title"><span>⚙️</span> Under the Hood</div>
+        <table class="tech-table">
+          <tr>
+            <td>Database</td>
+            <td><span class="tech-val-mono">SQLite (sql.js / WASM)</span></td>
+          </tr>
+          <tr>
+            <td>Persistence</td>
+            <td><span class="tech-val-mono">IndexedDB</span></td>
+          </tr>
+          <tr>
+            <td>Network</td>
+            <td>None required</td>
+          </tr>
+          <tr>
+            <td>Stack</td>
+            <td>HTML · CSS · Vanilla JS</td>
+          </tr>
+          <tr>
+            <td>PWA</td>
+            <td>Service Worker + manifest</td>
+          </tr>
+          <tr>
+            <td>Version</td>
+            <td><span class="tech-val-mono">v1.0</span></td>
+          </tr>
+        </table>
+      </div>
+
+      <!-- ── Databases ── -->
+      <div class="about-card">
+        <div class="about-card-title"><span>🗄️</span> Local Databases</div>
+
+        <div class="db-row">
+          <div>
+            <div class="db-row-name">students.db</div>
+            <div class="db-row-detail">StudentRegisterStorage · one table per class</div>
+          </div>
+          <div class="db-status-dot" id="dot-students"></div>
+        </div>
+
+        <div class="db-row">
+          <div>
+            <div class="db-row-name">staff.db</div>
+            <div class="db-row-detail">subteach_app · teachers table</div>
+          </div>
+          <div class="db-status-dot" id="dot-staff"></div>
+        </div>
+
+        <div class="db-row">
+          <div>
+            <div class="db-row-name">scores.db</div>
+            <div class="db-row-detail">sch_scores · all assessment records</div>
+          </div>
+          <div class="db-status-dot" id="dot-scores"></div>
+        </div>
+
+        <p style="font-size:0.72rem;color:var(--text-muted);margin-top:12px;line-height:1.6">
+          Green dot = data found on this device. 
+          Use the <strong>Export DB</strong> buttons on each page to download backups.
+        </p>
+      </div>
+
+      <!-- ── Author ── -->
+      <div class="about-card">
+        <div class="about-card-title"><span>👤</span> Author</div>
+        <div class="author-name">Edmund Sparrow</div>
+        <div class="author-role">Part of the Gnoke Suite — offline-first tools for developers, retailers, and independent builders.</div>
+        <div class="author-links">
+          <a class="btn btn-ghost btn-sm" href="mailto:edmundsparrow@gmail.com">✉ Email</a>
+          <a class="btn btn-ghost btn-sm" href="https://github.com/edmundsparrow" target="_blank" rel="noopener">⌥ GitHub</a>
+          <a class="btn btn-ghost btn-sm" href="https://selar.com/showlove/edmundsparrow" target="_blank" rel="noopener">❤ Coffee</a>
+        </div>
+      </div>
+
+      <!-- ── Version ── -->
+      <div class="about-card">
+        <div class="about-card-title"><span>🔄</span> Version</div>
+        <div class="version-row">
+          <span class="version-number">v1.0</span>
+          <span class="version-label">Current release</span>
+        </div>
+        <p class="version-hint">
+          Released 2026. To update, download the latest version from the GitHub repository and replace your local files.
+          Your databases (IndexedDB) are preserved between updates.
+        </p>
+        <div style="margin-top:14px;">
+          <a class="btn btn-secondary btn-sm"
+             href="https://github.com/edmundsparrow/gnoke-college/releases"
+             target="_blank" rel="noopener">
+            View releases on GitHub →
+          </a>
+        </div>
+      </div>
+
+      <!-- ── License ── -->
+      <div class="about-card">
+        <div class="about-card-title"><span>📜</span> License</div>
+        <div class="license-name">GNU General Public License v3.0</div>
+        <p class="license-desc">
+          Free and open source. Use it, modify it, share it — but keep it open.
+          Commercial use requires explicit permission from the author.
+        </p>
+        <p class="license-copy">© 2026 Edmund Sparrow — Gnoke Suite</p>
+      </div>
+
+      <!-- ── Support ── -->
+      <div class="about-card">
+        <div class="about-card-title"><span>☕</span> Support</div>
+        <p class="support-text">
+          If Gnoke College saves you time, consider buying the author a coffee.
+          It helps fund ongoing development and new tools in the Gnoke Suite.
+        </p>
+        <a class="btn btn-primary btn-sm"
+           href="https://selar.com/showlove/edmundsparrow"
+           target="_blank" rel="noopener">
+          ❤ Buy me a coffee
+        </a>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<div id="toast-root"></div>
+<script src="sch.js"></script>
+<script src="menu.js"></script>
+<script>
+/* Show the page immediately — no DB needed for About */
+document.addEventListener('DOMContentLoaded', () => {
+  hideBoot('app');
+
+  /* Async: check which DBs have data and light up the dots */
+  async function checkDbs() {
+    const checks = [
+      { id: 'dot-students', idb: 'StudentRegisterStorage', store: 'db_blobs', key: 'db' },
+      { id: 'dot-staff',    idb: 'subteach_app',           store: 'database', key: 'db' },
+      { id: 'dot-scores',   idb: 'sch_scores',             store: 'database', key: 'db' },
+    ];
+
+    for (const c of checks) {
+      try {
+        const blob = await idbGet(c.idb, c.store, c.key);
+        const dot = document.getElementById(c.id);
+        if (dot) dot.classList.add(blob ? 'ok' : 'empty');
+      } catch { /* ignore */ }
+    }
+
+    /* Also update sidebar counts if SQL is available */
+    try {
+      const SQL = await initSqlJs({
+        locateFile: f => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.2/${f}`
+      });
+
+      const CLASSES = [
+        'SS1A','SS1B','SS1C','SS1D','SS2A','SS2B','SS2C','SS2D','SS3A','SS3B','SS3C','SS3D',
+        'JSS1A','JSS1B','JSS1C','JSS1D','JSS2A','JSS2B','JSS2C','JSS2D','JSS3A','JSS3B','JSS3C','JSS3D'
+      ];
+
+      const stuBlob = await idbGet('StudentRegisterStorage', 'db_blobs', 'db');
+      if (stuBlob) {
+        const db = new SQL.Database(new Uint8Array(stuBlob));
+        let total = 0;
+        for (const cls of CLASSES) {
+          try {
+            const r = db.exec(`SELECT COUNT(*) FROM "${cls}"`);
+            if (r.length) total += r[0].values[0][0];
+          } catch { /* table may not exist yet */ }
+        }
+        const el = document.getElementById('sb-student-total');
+        if (el) el.textContent = total;
+      }
+
+      const staffBlob = await idbGet('subteach_app', 'database', 'db');
+      if (staffBlob) {
+        const db = new SQL.Database(new Uint8Array(staffBlob));
+        const r = db.exec('SELECT COUNT(*) FROM teachers');
+        const el = document.getElementById('sb-staff-count');
+        if (r.length && el) el.textContent = r[0].values[0][0];
+      }
+    } catch { /* SQL load failure is non-fatal on About page */ }
+  }
+
+  /* Sync — placeholder for future cloud backup */
+  function showSyncNote() {
+    toast.info('Coming soon', 'Cloud backup is not yet available. Use Export DB on each page to back up locally.');
+  }
+
+  checkDbs();
+});
+</script>
+<script>
+/* ── Updater — wired to #btn-check-update ── */
+const Updater = (() => {
+  const REPO_OWNER  = 'edmundsparrow';
+  const REPO_NAME   = 'gnoke-college';
+  const APP_VERSION = 'v1.0';
+  const README_URL  = `https://raw.githubusercontent.com/${REPO_OWNER}/${REPO_NAME}/main/README.md`;
+  const RELEASES_URL = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/releases/latest`;
+
+  function parse(str) {
+    const p = String(str||'').replace(/^v/i,'').split('.').map(n=>parseInt(n,10)||0);
+    while (p.length < 3) p.push(0);
+    return p;
+  }
+  function compare(a, b) {
+    for (let i = 0; i < 3; i++) { if (a[i] > b[i]) return 1; if (a[i] < b[i]) return -1; }
+    return 0;
+  }
+  async function latestVersion() {
+    try {
+      const r = await fetch(README_URL, { cache: 'no-store' });
+      if (!r.ok) throw new Error();
+      const m = (await r.text()).match(/\bv(\d+\.\d+(?:\.\d+)?)\b/i);
+      if (m) return `v${m[1]}`;
+    } catch {}
+    const r2 = await fetch(RELEASES_URL, { cache: 'no-store', headers: { Accept: 'application/vnd.github+json' } });
+    if (!r2.ok) throw new Error(`API ${r2.status}`);
+    const d = await r2.json();
+    if (!d.tag_name) throw new Error('No tag');
+    return d.tag_name;
+  }
+
+  async function check() {
+    const btn = document.getElementById('btn-check-update');
+    if (!btn) return;
+    btn.disabled = true;
+    btn.textContent = '⏳ Checking…';
+
+    /* Remove any previous result */
+    document.getElementById('upd-result-row')?.remove();
+
+    try {
+      const latest = await latestVersion();
+      const newer  = compare(parse(latest), parse(APP_VERSION)) > 0;
+
+      const row = document.createElement('div');
+      row.id = 'upd-result-row';
+      row.style.cssText = 'margin: 0 0 20px; animation: fade-in 200ms ease;';
+      row.innerHTML = newer
+        ? `<div style="display:flex;align-items:flex-start;gap:10px;padding:14px 16px;
+              border-radius:10px;background:#fff8e1;border:1.5px solid #f59e0b;">
+            <span style="font-size:1.1rem;flex-shrink:0">🚀</span>
+            <div>
+              <div style="font-size:.86rem;font-weight:700;color:#92400e">Update available — ${latest}</div>
+              <div style="font-size:.76rem;color:#b45309;margin-top:2px">You're running ${APP_VERSION}</div>
+              <a href="https://github.com/${REPO_OWNER}/${REPO_NAME}/releases" target="_blank"
+                 style="display:inline-block;margin-top:6px;font-size:.78rem;font-weight:600;color:var(--primary)">
+                View release →
+              </a>
+            </div>
+           </div>`
+        : `<div style="display:flex;align-items:center;gap:10px;padding:14px 16px;
+              border-radius:10px;background:#eef5f1;border:1.5px solid rgba(30,97,59,.18);">
+            <span style="font-size:1.1rem">✅</span>
+            <div>
+              <div style="font-size:.86rem;font-weight:700;color:var(--primary)">You're up to date</div>
+              <div style="font-size:.76rem;color:var(--text-muted);margin-top:1px">Running ${APP_VERSION} — latest is ${latest}</div>
+            </div>
+           </div>`;
+
+      /* Insert just above the card grid */
+      const grid = document.querySelector('.about-grid');
+      grid?.parentNode.insertBefore(row, grid);
+
+      toast[newer ? 'info' : 'success'](
+        newer ? `Update available: ${latest}` : 'App is up to date ✓', ''
+      );
+    } catch (err) {
+      toast.error('Update check failed', 'No internet or repo unavailable.');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = '🔄 Check for Updates';
+    }
+  }
+
+  return { check };
+})();
+
+document.getElementById('btn-check-update')
+  ?.addEventListener('click', Updater.check);
+</script>
+</body>
+</html>
