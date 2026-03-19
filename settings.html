@@ -138,6 +138,9 @@
       <div class="hamburger" id="menuBtn">&#9776;</div>
       <span class="nav-page-title">Settings</span>
     </div>
+    <div class="nav-right">
+      <button class="btn btn-secondary btn-sm" id="btn-check-update">🔄 Update</button>
+    </div>
   </nav>
 
   <div class="main-content">
@@ -683,6 +686,45 @@ document.addEventListener('DOMContentLoaded', async () => {
     await checkDbStatus();
     await populateForms();
   });
+});
+</script>
+
+<script>
+/* ── Update — force reload live site, bypass SW cache ── */
+async function applyUpdate() {
+  const btn = document.getElementById('btn-check-update');
+  if (!btn) return;
+  btn.disabled = true;
+  btn.textContent = '⏳ Updating…';
+
+  try {
+    if ('serviceWorker' in navigator) {
+      const reg = await navigator.serviceWorker.getRegistration();
+      if (reg) {
+        /* Tell SW to fetch latest sw.js from network */
+        await reg.update();
+
+        if (reg.waiting) {
+          /* New SW already waiting — activate it immediately */
+          reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+          /* Reload once new SW takes control */
+          navigator.serviceWorker.addEventListener('controllerchange', () => {
+            location.reload();
+          });
+          return;
+        }
+      }
+    }
+    /* No SW or no waiting update — hard reload bypasses cache */
+    location.reload(true);
+  } catch {
+    location.reload(true);
+  }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('btn-check-update')
+    ?.addEventListener('click', applyUpdate);
 });
 </script>
 </body>
