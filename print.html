@@ -6,6 +6,7 @@
   <title>Print Centre — School Management</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.2/sql-wasm.js"></script>
   <link rel="stylesheet" href="sch.css">
+  <link rel="stylesheet" href="result.css">
   <style>
     body { display: flex; }
 
@@ -426,7 +427,34 @@ function calcRemark(g) {
   return { A:'Excellent', B:'Very Good', C:'Good', D:'Pass', F:'Fail' }[g] || '—';
 }
 
-/* Compute position for each student given their average across subjects */
+function autoComment(average, name, position, total, grades) {
+  const first = name.split(' ')[0];
+  const avg   = Number(average);
+  const fCount = (grades || []).filter(g => g === 'F').length;
+  const aCount = (grades || []).filter(g => g === 'A').length;
+
+  let classteacher, principal;
+
+  if (avg >= 75) {
+    classteacher = `${first} has shown outstanding academic performance this term. A highly dedicated and brilliant student.`;
+    principal    = `Excellent result. Keep up the great work and maintain this high standard. Well done, ${first}.`;
+  } else if (avg >= 65) {
+    classteacher = `${first} performed very well this term and demonstrated commendable commitment to academic excellence.`;
+    principal    = `A very good performance. With continued effort, ${first} can reach the top of the class.`;
+  } else if (avg >= 55) {
+    classteacher = `${first} has performed satisfactorily this term. There is room for improvement, especially with more consistent study.`;
+    principal    = `A fair performance. I encourage ${first} to work harder next term and aim for better results.`;
+  } else if (avg >= 45) {
+    classteacher = `${first} showed some progress this term but must improve focus and study habits to perform better.`;
+    principal    = `Below expectation. ${first} must put in more effort next term. Parental support is advised.`;
+  } else {
+    classteacher = `${first} needs significant improvement. Poor performance recorded this term. Extra effort required urgently.`;
+    principal    = `Very poor result. ${first} must make a serious commitment to studies. Parents are strongly advised to intervene.`;
+  }
+
+  return { classteacher, principal };
+}
+
 function computePositions(students, scoreMap, subjects) {
   const avgs = students.map(s => {
     const scores = subjects.map(subj => {
@@ -475,6 +503,8 @@ function renderReportCards(cls, term, session, filterStudentId) {
     const grandTotal = allTotals.reduce((a,b) => a+b, 0);
     const average    = allTotals.length ? (grandTotal / allTotals.length).toFixed(1) : '—';
     const position   = posMap[student.id] || '—';
+    const allGrades  = subjects.map(subj => sScores[subj]?.grade).filter(Boolean);
+    const comments   = autoComment(average, student.name, position, students.length, allGrades);
 
     /* Subjects rows */
     const subjectRows = subjects.map((subj, idx) => {
@@ -561,28 +591,16 @@ function renderReportCards(cls, term, session, filterStudentId) {
           <div class="rc-footer-label">Status</div>
           <div class="rc-footer-val"></div>
         </div>
-        <div class="rc-footer-cell">
-          <div class="rc-footer-label">Fees Owed</div>
-          <div class="rc-footer-val"></div>
-        </div>
-        <div class="rc-footer-cell">
-          <div class="rc-footer-label">Next Term Fee</div>
-          <div class="rc-footer-val"></div>
-        </div>
-        <div class="rc-footer-cell">
-          <div class="rc-footer-label">Reopening Date</div>
-          <div class="rc-footer-val"></div>
-        </div>
       </div>
 
       <div class="rc-comment-row">
         <span class="rc-comment-label">Class Teacher's Comment:</span>
-        <span class="rc-comment-line"></span>
+        <span class="rc-comment-line">&nbsp;${comments.classteacher}</span>
         <span class="rc-sign">Sign: <span class="rc-sign-line"></span></span>
       </div>
       <div class="rc-comment-row" style="border:1px solid #000;border-top:none">
         <span class="rc-comment-label">Principal's Comment:</span>
-        <span class="rc-comment-line"></span>
+        <span class="rc-comment-line">&nbsp;${comments.principal}</span>
         <span class="rc-sign">Sign: <span class="rc-sign-line"></span></span>
       </div>
     </div>`;

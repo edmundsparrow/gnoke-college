@@ -422,12 +422,12 @@ async function saveSettings(data) {
 /* ── Populate session dropdown ── */
 function buildSessionOptions() {
   const sel = document.getElementById('cfg-session');
-  const year = new Date().getFullYear();
-  for (let y = year - 3; y <= year + 2; y++) {
+  ['2025/2026', '2026/2027', '2027/2028'].forEach(v => {
     const opt = document.createElement('option');
-    opt.value = opt.textContent = `${y}/${y + 1}`;
+    opt.value = opt.textContent = v;
     sel.appendChild(opt);
-  }
+  });
+  sel.value = '2025/2026';
 }
 
 /* ── Fill form from saved settings ── */

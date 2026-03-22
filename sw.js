@@ -1,5 +1,5 @@
 /* Gnoke College — Service Worker v0.5 */
-const CACHE = 'gnoke-college-v0.5';
+const CACHE = 'gnoke-college-v0.6';
 const ASSETS = [
   './',
   './index.html',
@@ -15,6 +15,7 @@ const ASSETS = [
   './stss.html',
   './student.html',
   './sch.css',
+  './result.css',
   './db-connect.js',
   './menu.js',
   './sch.js',
