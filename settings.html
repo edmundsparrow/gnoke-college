@@ -698,36 +698,31 @@ document.addEventListener('DOMContentLoaded', async () => {
 </script>
 
 <script>
-/* ── Update — force reload live site, bypass SW cache ── */
+/* ── Update — clear SW cache then reload fresh files ── */
 async function applyUpdate() {
   const btn = document.getElementById('btn-check-update');
   if (!btn) return;
-  btn.disabled = true;
-  btn.textContent = '⏳ Updating…';
+  btn.disabled    = true;
+  btn.textContent = '⏳ Clearing cache…';
 
   try {
+    /* Step 1: Delete every cache this origin owns */
+    const keys = await caches.keys();
+    await Promise.all(keys.map(k => caches.delete(k)));
+
+    /* Step 2: Unregister the SW so the next load re-registers
+       it and fetches a completely fresh sw.js + all assets */
     if ('serviceWorker' in navigator) {
       const reg = await navigator.serviceWorker.getRegistration();
-      if (reg) {
-        /* Tell SW to fetch latest sw.js from network */
-        await reg.update();
-
-        if (reg.waiting) {
-          /* New SW already waiting — activate it immediately */
-          reg.waiting.postMessage({ type: 'SKIP_WAITING' });
-          /* Reload once new SW takes control */
-          navigator.serviceWorker.addEventListener('controllerchange', () => {
-            location.reload();
-          });
-          return;
-        }
-      }
+      if (reg) await reg.unregister();
     }
-    /* No SW or no waiting update — hard reload bypasses cache */
-    location.reload(true);
-  } catch {
-    location.reload(true);
+  } catch (e) {
+    console.warn('[update] cache clear failed', e);
   }
+
+  /* Step 3: Hard reload — no cache in play now */
+  btn.textContent = '⏳ Reloading…';
+  location.reload(true);
 }
 
 document.addEventListener('DOMContentLoaded', () => {
