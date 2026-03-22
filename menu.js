@@ -34,6 +34,7 @@ const NAV_ITEMS = [
     links: [
       { label: 'About',    href: 'about.html'    },
       { label: 'Settings', href: 'settings.html' },
+      { label: 'Logout',   action: 'logout'      },
     ],
   },
 ];
@@ -44,9 +45,15 @@ function buildSidebar() {
   const sectionsHTML = NAV_ITEMS.map(({ section, links }) =>
     `<div class="menu-section">
       <span class="section-label">${section}</span>
-      ${links.map(({ label, href }) =>
-        `<a href="${href}" class="menu-item${page === href ? ' active' : ''}">${label}</a>`
-      ).join('')}
+      ${links.map(({ label, href, action }) => {
+        if (action === 'logout') {
+          return `<button class="menu-item menu-item-logout" onclick="gnoke_logout()">
+                    ${label}
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/></svg>
+                  </button>`;
+        }
+        return `<a href="${href}" class="menu-item${page === href ? ' active' : ''}">${label}</a>`;
+      }).join('')}
     </div>`
   ).join('');
 
@@ -118,3 +125,30 @@ document.addEventListener('DOMContentLoaded', () => {
   initSidebarToggle();
   initCascade();
 });
+
+/* ── Logout ── */
+function gnoke_logout() {
+  sessionStorage.removeItem('gnoke_school_session');
+  location.replace('login.html');
+}
+
+/* ── Logout button style (injected once) ── */
+(function () {
+  if (document.getElementById('menu-logout-style')) return;
+  const s = document.createElement('style');
+  s.id = 'menu-logout-style';
+  s.textContent = `
+    .menu-item-logout {
+      width: 100%; text-align: left; font-family: inherit;
+      font-size: 0.88rem; background: none; cursor: pointer;
+      color: #b91c1c; border-left: 3px solid transparent;
+      padding: 10px 25px; border-top: 1px solid var(--border);
+      margin-top: 4px; display: flex; align-items: center;
+      justify-content: space-between; transition: all 150ms;
+    }
+    .menu-item-logout:hover {
+      background: #fee2e2; border-left-color: #b91c1c;
+    }
+  `;
+  document.head.appendChild(s);
+})();
