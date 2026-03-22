@@ -349,24 +349,59 @@ table.bs-table td.pos-col   { font-weight: 700; color: #166534; }
 
 
 /* ── 10. PRINT MEDIA ── */
+
+/*
+   Mobile WebKit print strategy:
+   - .print-rc-wrap must be visible via CLASS toggle, not inline style
+   - Everything else hidden via class .no-print
+   - @page margin:10mm on mobile prevents blank-page bleed
+   - break-inside:avoid on rows prevents mid-row page breaks
+*/
+
+/* Class applied to body during print via JS — hides the app shell */
+body.printing > *:not(#print-rc-wrap) {
+  display: none !important;
+}
+body.printing #print-rc-wrap {
+  display: block !important;
+  position: static !important;
+}
+
 @media print {
   @page {
     size: A4 portrait;
-    margin: 0;
+    margin: 10mm;
+  }
+
+  /* Hide everything except the print wrapper */
+  body > *:not(#print-rc-wrap) {
+    display: none !important;
+  }
+
+  #print-rc-wrap {
+    display: block !important;
+    position: static !important;
   }
 
   .report-card {
-    box-shadow: none;
-    border-radius: 0;
-    margin: 0;
-    padding: 8mm 8mm 6mm;
-    max-width: 100%;
-    width: 100%;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    margin: 0 0 0 0 !important;
+    padding: 0 !important;
+    max-width: 100% !important;
+    width: 100% !important;
     page-break-after: always;
-    font-size: 9.5pt;
+    break-after: page;
+    font-size: 9pt;
   }
 
-  /* Restore social traits + grading key for print */
+  /* Prevent row splits across pages */
+  .rc-table tbody tr {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  /* Restore social traits + grading key columns hidden on mobile */
   .rc-table th.social-th,
   .rc-table td.social-col,
   .rc-table th.rc-grade-key,
@@ -374,17 +409,21 @@ table.bs-table td.pos-col   { font-weight: 700; color: #166534; }
     display: table-cell !important;
   }
 
-  .rc-school-name { font-size: 14pt; }
-  .rc-meta-row    { font-size: 8.5pt; }
-  .rc-name-row    { font-size: 9.5pt; }
+  .rc-school-name { font-size: 13pt; }
+  .rc-meta-row    { font-size: 8pt; }
+  .rc-name-row    { font-size: 9pt; }
   .rc-table th,
-  .rc-table td    { font-size: 7.8pt; padding: 2.5px 4px; }
+  .rc-table td    { font-size: 7.5pt; padding: 2px 3px; }
+
+  .rc-footer-label { font-size: 6.5pt; }
+  .rc-footer-val   { font-size: 8pt; }
+  .rc-comment-label { font-size: 6.5pt; }
+  .rc-comment-line  { font-size: 7.5pt; }
 
   .broadsheet {
-    box-shadow: none;
-    overflow: visible;
+    box-shadow: none !important;
+    overflow: visible !important;
   }
-
   table.bs-table th,
   table.bs-table td { font-size: 7pt; padding: 2px 3px; }
 }

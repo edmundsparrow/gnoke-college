@@ -7,6 +7,7 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.2/sql-wasm.js"></script>
   <link rel="stylesheet" href="sch.css">
   <link rel="stylesheet" href="result.css">
+  <link rel="stylesheet" href="result.css">
   <style>
     body { display: flex; }
 
@@ -173,19 +174,8 @@
     .grade-F-p { color: #b91c1c; }
 
     /* ── Print media ── */
-    @media print {
-      @page { size: A4; margin: 0; }
-      #boot-screen, .topnav, .mode-bar, .controls-bar,
-      .stats-bar, .sidebar, #sb-overlay, .no-print { display: none !important; }
-      .content-wrap { display: block !important; }
-      .preview-wrap { padding: 0; background: #fff; overflow: visible; }
-      .report-card {
-        box-shadow: none; margin: 0;
-        width: 100%; padding: 8mm 8mm 6mm;
-      }
-      .broadsheet { box-shadow: none; }
-      .preview-empty { display: none; }
-    }
+    /* Print — handled by result.css via body.printing class */
+    .no-print { /* marker class used by print button logic */ }
   </style>
 </head>
 <body>
@@ -298,6 +288,9 @@
   </div>
 
 </div>
+
+<!-- Print container — result.css shows this via body.printing -->
+<div id="print-rc-wrap"></div>
 
 <div id="toast-root"></div>
 <script src="sch.js"></script>
@@ -786,7 +779,12 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('print-btn').addEventListener('click', () => {
     const content = document.getElementById('preview-content').innerHTML;
     if (!content.trim()) { toast.warning('Nothing to print', 'Load a preview first.'); return; }
+    const wrap = document.getElementById('print-rc-wrap');
+    wrap.innerHTML = content;
+    document.body.classList.add('printing');
     window.print();
+    document.body.classList.remove('printing');
+    wrap.innerHTML = '';
   });
 });
 </script>

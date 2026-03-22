@@ -6,6 +6,7 @@
   <title>Results Viewer — Admin Module</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.2/sql-wasm.js"></script>
   <link rel="stylesheet" href="sch.css">
+  <link rel="stylesheet" href="result.css">
   <style>
     body { display: flex; }
 
@@ -87,6 +88,11 @@
       text-align: left; padding-left: 14px;
       font-weight: 600; color: var(--text); white-space: nowrap;
     }
+    .res-table td.td-name-link {
+      color: var(--primary); cursor: pointer;
+      text-decoration: underline dotted;
+    }
+    .res-table td.td-name-link:hover { text-decoration: underline; }
     /* S/N */
     .res-table td.td-sn { color: var(--text-muted); font-size: 0.76rem; width: 40px; }
 
@@ -287,6 +293,38 @@
 </div>
 
 <div id="toast-root"></div>
+
+<!-- Report card print wrapper — class-hidden so result.css @media print can override -->
+<div id="print-rc-wrap"></div>
+
+<style>
+  /* ── Report card modal ── */
+  .rc-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,.5);
+    z-index: 9000; display: flex; align-items: flex-start;
+    justify-content: center; padding: 20px; overflow-y: auto;
+  }
+  .rc-modal {
+    background: #f0ece4; border-radius: var(--r-lg);
+    width: 100%; max-width: 760px;
+    box-shadow: 0 12px 48px rgba(0,0,0,.28);
+    animation: rc-in 200ms ease;
+  }
+  @keyframes rc-in { from { opacity: 0; transform: scale(.97); } }
+  .rc-modal-bar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 18px; background: var(--card-bg);
+    border-bottom: 1px solid var(--border);
+    border-radius: var(--r-lg) var(--r-lg) 0 0;
+  }
+  .rc-modal-bar-title { font-family: serif; font-size: 1rem; font-weight: 700; color: var(--text); }
+  .rc-modal-actions   { display: flex; gap: 8px; align-items: center; }
+  .rc-modal-body      { padding: 20px; }
+
+  /* Print wrapper hidden by default — result.css @media print + body.printing shows it */
+  #print-rc-wrap { display: none; }
+</style>
+
 <script src="sch.js"></script>
 <script src="menu.js"></script>
 <script>
@@ -303,6 +341,8 @@ const IDB = {
 let SQL = null;
 let scoresDB   = null;
 let teachersDB = null;
+let studentsDB = null;
+let schoolName = 'School Management';
 
 /* ─────────────────────────────────────────────
    Session dropdown — populated dynamically
@@ -421,7 +461,7 @@ function renderTable() {
 
   try {
     const res = scoresDB.exec(
-      `SELECT student_name, cat1, cat2, assignment, cw, note, exams, total, grade
+      `SELECT student_id, student_name, cat1, cat2, assignment, cw, note, exams, total, grade
        FROM scores
        WHERE class_level=? AND subject=? AND term=? AND session=?
        ORDER BY student_name ASC`,
@@ -438,14 +478,14 @@ function renderTable() {
     const totals = [];
     const grades = { A: 0, B: 0, C: 0, D: 0, F: 0 };
 
-    tbody.innerHTML = rows.map(([name, c1, c2, ass, cw, nt, ex, total, grade], i) => {
+    tbody.innerHTML = rows.map(([sid, name, c1, c2, ass, cw, nt, ex, total, grade], i) => {
       const t = Number(total) || 0;
       totals.push(t);
       if (grade in grades) grades[grade]++;
       const gradeClass = grade in grades ? `grade-${grade}` : '';
       return `<tr>
         <td class="td-sn">${i + 1}</td>
-        <td class="td-name">${name}</td>
+        <td class="td-name td-name-link" onclick="openReportCard('${sid}','${name.replace(/'/g,"\\'")}')">${name}</td>
         <td>${c1 != null ? c1 : '—'}</td>
         <td>${c2 != null ? c2 : '—'}</td>
         <td>${ass != null ? ass : '—'}</td>
@@ -508,6 +548,258 @@ function wireEvents() {
 }
 
 /* ─────────────────────────────────────────────
+   Report card constants
+───────────────────────────────────────────── */
+const SOCIAL_TRAITS = [
+  'Punctuality','Neatness','Relationship','Leadership',
+  'Confidence','Obedience','Honesty','Skills','Politeness','Sports',
+];
+const GRADING = [
+  { grade:'A', range:'70 – 100', remark:'Excellent'  },
+  { grade:'B', range:'60 – 69',  remark:'Very Good'  },
+  { grade:'C', range:'50 – 59',  remark:'Good'       },
+  { grade:'D', range:'40 – 49',  remark:'Pass'       },
+  { grade:'F', range:'0 – 39',   remark:'Fail'       },
+];
+
+function calcGrade(t) {
+  if (t == null || t === '') return '—';
+  const n = Number(t);
+  return n >= 70 ? 'A' : n >= 60 ? 'B' : n >= 50 ? 'C' : n >= 40 ? 'D' : 'F';
+}
+function calcRemark(g) {
+  return { A:'Excellent', B:'Very Good', C:'Good', D:'Pass', F:'Fail' }[g] || '—';
+}
+
+function autoComment(average, name) {
+  const first = name.split(' ')[0];
+  const avg   = Number(average);
+  let classteacher, principal;
+  if (avg >= 75) {
+    classteacher = `${first} has shown outstanding academic performance this term. A highly dedicated and brilliant student.`;
+    principal    = `Excellent result. Keep up the great work and maintain this high standard. Well done, ${first}.`;
+  } else if (avg >= 65) {
+    classteacher = `${first} performed very well this term and demonstrated commendable commitment to academic excellence.`;
+    principal    = `A very good performance. With continued effort, ${first} can reach the top of the class.`;
+  } else if (avg >= 55) {
+    classteacher = `${first} has performed satisfactorily this term. There is room for improvement, especially with more consistent study.`;
+    principal    = `A fair performance. I encourage ${first} to work harder next term and aim for better results.`;
+  } else if (avg >= 45) {
+    classteacher = `${first} showed some progress this term but must improve focus and study habits to perform better.`;
+    principal    = `Below expectation. ${first} must put in more effort next term. Parental support is advised.`;
+  } else {
+    classteacher = `${first} needs significant improvement. Poor performance recorded this term. Extra effort required urgently.`;
+    principal    = `Very poor result. ${first} must make a serious commitment to studies. Parents are strongly advised to intervene.`;
+  }
+  return { classteacher, principal };
+}
+
+function computePositions(students, scoreMap, subjects) {
+  const avgs = students.map(s => {
+    const vals = subjects.map(subj => scoreMap[s.id]?.[subj]?.total)
+                         .filter(v => v != null).map(Number);
+    return { id: s.id, avg: vals.length ? vals.reduce((a,b)=>a+b,0)/vals.length : 0 };
+  });
+  avgs.sort((a,b) => b.avg - a.avg);
+  const pos = {};
+  avgs.forEach((item,i) => { pos[item.id] = i + 1; });
+  return pos;
+}
+
+/* ─────────────────────────────────────────────
+   Report card builder
+───────────────────────────────────────────── */
+function buildReportCard(studentId, studentName) {
+  const cls  = document.getElementById('classSelect').value;
+  const term = document.getElementById('termSelect').value;
+  const sess = document.getElementById('sessionSelect').value;
+  const termLabel = { FIRST:'First Term', SECOND:'Second Term', THIRD:'Third Term' }[term] || term;
+
+  /* Get all subjects for this student in this class/term/session */
+  let scoreMap = {};
+  if (scoresDB) {
+    try {
+      const r = scoresDB.exec(
+        `SELECT subject, cat1, cat2, assignment, note, cw, exams, total, grade
+         FROM scores WHERE student_id=? AND class_level=? AND term=? AND session=?`,
+        [studentId, cls, term, sess]
+      );
+      if (r.length) {
+        r[0].values.forEach(([subj, c1, c2, asgn, nt, cw, ex, tot, gr]) => {
+          scoreMap[subj] = { cat1:c1, cat2:c2, assignment:asgn, note:nt, cw, exams:ex, total:tot, grade:gr };
+        });
+      }
+    } catch {}
+  }
+
+  const subjects = Object.keys(scoreMap).sort();
+
+  /* Position — need all students in class for this */
+  let position = '—', classSize = '—';
+  if (studentsDB) {
+    try {
+      const sr = studentsDB.exec(`SELECT id, name FROM "${cls}" ORDER BY name`);
+      const allStudents = sr.length ? sr[0].values.map(([id,name]) => ({id,name})) : [];
+      classSize = allStudents.length;
+
+      /* Build score map for all students to compute positions */
+      const fullMap = {};
+      if (scoresDB && subjects.length) {
+        try {
+          const ar = scoresDB.exec(
+            `SELECT student_id, subject, total FROM scores
+             WHERE class_level=? AND term=? AND session=?`,
+            [cls, term, sess]
+          );
+          if (ar.length) {
+            ar[0].values.forEach(([sid, subj, tot]) => {
+              if (!fullMap[sid]) fullMap[sid] = {};
+              fullMap[sid][subj] = { total: tot };
+            });
+          }
+        } catch {}
+        const posMap = computePositions(allStudents, fullMap, subjects);
+        position = posMap[studentId] || '—';
+      }
+    } catch {}
+  }
+
+  const allTotals = subjects.map(subj => Number(scoreMap[subj]?.total) || 0).filter(v => v > 0);
+  const grandTotal = allTotals.reduce((a,b) => a+b, 0);
+  const average    = allTotals.length ? (grandTotal / allTotals.length).toFixed(1) : '—';
+  const comments   = autoComment(average, studentName);
+
+  const subjectRows = subjects.map((subj, idx) => {
+    const rec   = scoreMap[subj] || {};
+    const ca    = [rec.cat1, rec.cat2].filter(v => v != null && v !== '').map(Number);
+    const test  = ca.length ? ca.reduce((a,b) => a+b, 0) : '';
+    const grade = rec.grade || (rec.total != null ? calcGrade(rec.total) : '—');
+    const trait    = SOCIAL_TRAITS[idx] || '';
+    const gradeKey = GRADING[idx];
+    return `<tr>
+      <td class="subj">${subj.toUpperCase()}</td>
+      <td>${test !== '' ? test : '—'}</td>
+      <td>${rec.exams != null && rec.exams !== '' ? rec.exams : '—'}</td>
+      <td class="total-col">${rec.total != null && rec.total !== '' ? rec.total : '—'}</td>
+      <td class="grade-col">${grade}</td>
+      <td>${calcRemark(grade)}</td>
+      <td style="background:#fafafa;font-size:7.5pt">${trait}</td>
+      <td style="background:#fafafa"></td>
+      ${gradeKey
+        ? `<td class="rc-grade-key" style="background:#f5f5f5;font-weight:700">${gradeKey.grade}</td>
+           <td class="rc-grade-key" style="background:#f5f5f5">${gradeKey.range}</td>
+           <td class="rc-grade-key" style="background:#f5f5f5">${gradeKey.remark}</td>`
+        : `<td style="background:#f5f5f5"></td><td style="background:#f5f5f5"></td><td style="background:#f5f5f5"></td>`}
+    </tr>`;
+  }).join('');
+
+  return `
+  <div class="report-card">
+    <div class="rc-school-name">${schoolName.toUpperCase()}</div>
+    <div class="rc-subtitle">Student Report Card</div>
+    <div class="rc-meta-row">
+      <span><b>CLASS:</b> ${cls}</span>
+      <span><b>TERM:</b> ${termLabel}</span>
+      <span><b>SESSION:</b> ${sess}</span>
+    </div>
+    <div class="rc-name-row">STUDENT NAME: &nbsp;${studentName.toUpperCase()}</div>
+    <table class="rc-table">
+      <thead>
+        <tr>
+          <th rowspan="2" style="text-align:left;min-width:100px">Subject</th>
+          <th rowspan="2">Test<br>(30%)</th>
+          <th rowspan="2">Exam<br>(70%)</th>
+          <th rowspan="2">Total<br>(100%)</th>
+          <th rowspan="2">Grade</th>
+          <th rowspan="2">Remarks</th>
+          <th class="social-th" colspan="2">Social Traits</th>
+          <th class="rc-grade-key" colspan="3" style="background:#ebebeb">Grading Key</th>
+        </tr>
+        <tr>
+          <th class="social-th">Trait</th>
+          <th class="social-th">Rating</th>
+          <th class="rc-grade-key" style="background:#ebebeb">Grade</th>
+          <th class="rc-grade-key" style="background:#ebebeb">Score</th>
+          <th class="rc-grade-key" style="background:#ebebeb">Remark</th>
+        </tr>
+      </thead>
+      <tbody>${subjectRows || '<tr><td colspan="11" style="text-align:center;padding:20px;color:#999">No scores recorded for this student.</td></tr>'}</tbody>
+      <tfoot>
+        <tr>
+          <td colspan="3" style="text-align:right;font-weight:700;font-size:8pt">TOTAL / AVERAGE</td>
+          <td class="total-col">${grandTotal || '—'}</td>
+          <td colspan="2" style="font-weight:700">${average}</td>
+          <td colspan="5"></td>
+        </tr>
+      </tfoot>
+    </table>
+    <div class="rc-footer">
+      <div class="rc-footer-cell">
+        <div class="rc-footer-label">Position in Class</div>
+        <div class="rc-footer-val">${position} of ${classSize}</div>
+      </div>
+      <div class="rc-footer-cell">
+        <div class="rc-footer-label">Subjects Offered</div>
+        <div class="rc-footer-val">${subjects.length}</div>
+      </div>
+      <div class="rc-footer-cell">
+        <div class="rc-footer-label">Status</div>
+        <div class="rc-footer-val"></div>
+      </div>
+    </div>
+    <div class="rc-comment-row">
+      <span class="rc-comment-label">Class Teacher's Comment:</span>
+      <span class="rc-comment-line">&nbsp;${comments.classteacher}</span>
+      <span class="rc-sign">Sign: <span class="rc-sign-line"></span></span>
+    </div>
+    <div class="rc-comment-row" style="border:1px solid #000;border-top:none">
+      <span class="rc-comment-label">Principal's Comment:</span>
+      <span class="rc-comment-line">&nbsp;${comments.principal}</span>
+      <span class="rc-sign">Sign: <span class="rc-sign-line"></span></span>
+    </div>
+  </div>`;
+}
+
+/* ─────────────────────────────────────────────
+   Open report card modal
+───────────────────────────────────────────── */
+function openReportCard(studentId, studentName) {
+  const html = buildReportCard(studentId, studentName);
+  const ov   = document.createElement('div');
+  ov.id        = 'rc-overlay';
+  ov.className = 'rc-overlay';
+  ov.innerHTML = `
+    <div class="rc-modal">
+      <div class="rc-modal-bar">
+        <span class="rc-modal-bar-title">${studentName} — Report Card</span>
+        <div class="rc-modal-actions">
+          <button class="btn btn-primary btn-sm" onclick="printSingleCard(this)">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+            Print
+          </button>
+          <button class="btn btn-ghost btn-sm" onclick="document.getElementById('rc-overlay').remove()">✕ Close</button>
+        </div>
+      </div>
+      <div class="rc-modal-body">${html}</div>
+    </div>`;
+  document.body.appendChild(ov);
+  ov.addEventListener('click', e => { if (e.target === ov) ov.remove(); });
+  document.addEventListener('keydown', function esc(e) {
+    if (e.key === 'Escape') { ov.remove(); document.removeEventListener('keydown', esc); }
+  });
+}
+
+function printSingleCard(btn) {
+  const rc   = btn.closest('.rc-modal').querySelector('.report-card');
+  const wrap = document.getElementById('print-rc-wrap');
+  wrap.innerHTML = rc.outerHTML;
+  document.body.classList.add('printing');
+  window.print();
+  document.body.classList.remove('printing');
+  wrap.innerHTML = '';
+}
+
+/* ─────────────────────────────────────────────
    Boot
 ───────────────────────────────────────────── */
 document.addEventListener('DOMContentLoaded', async () => {
@@ -521,6 +813,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Load teachers DB (for teacher name lookup)
     const teachersBlob = await idbGet(IDB.teachers.name, IDB.teachers.store, IDB.teachers.key);
     if (teachersBlob) teachersDB = new SQL.Database(new Uint8Array(teachersBlob));
+
+    // Load students DB (for report card)
+    const studentsBlob = await idbGet(IDB.students.name, IDB.students.store, IDB.students.key);
+    if (studentsBlob) studentsDB = new SQL.Database(new Uint8Array(studentsBlob));
+
+    // Load school name from settings
+    const cfg = await idbGet(IDB.settings.name, IDB.settings.store, IDB.settings.key).catch(() => null);
+    if (cfg?.schoolName) schoolName = cfg.schoolName;
 
   } catch (e) {
     document.querySelector('.boot-sub').textContent = 'Failed to load. Please refresh.';

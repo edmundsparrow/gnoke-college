@@ -185,12 +185,7 @@
     .rc-grade-key     { font-size: 7.5pt; }
 
     /* ── Print ── */
-    @media print {
-      @page { size: A4; margin: 0; }
-      #boot-screen, .topnav, .controls-bar, .results-area,
-      .stats-row, .sidebar, #sb-overlay, .rc-overlay { display: none !important; }
-      .print-rc-wrap { display: block !important; }
-    }
+    /* ── Print — handled by result.css ── */
     .print-rc-wrap { display: none; }
   </style>
 </head>
@@ -382,6 +377,8 @@ function autoComment(average, name, position, total, grades) {
   return { classteacher, principal };
 }
 
+/* ══════════════════════════════════════════════════════
+   Data helpers
 ══════════════════════════════════════════════════════ */
 function getStudents() {
   if (!studentsDB || !currentClass) return [];
@@ -657,11 +654,9 @@ function printSingleCard(btn) {
   const rc   = btn.closest('.rc-modal').querySelector('.report-card');
   const wrap = document.getElementById('print-rc-wrap');
   wrap.innerHTML = rc.outerHTML;
-  /* Temporarily hide the overlay */
-  const ov = document.getElementById('rc-overlay');
-  if (ov) ov.style.display = 'none';
+  document.body.classList.add('printing');
   window.print();
-  if (ov) ov.style.display = 'flex';
+  document.body.classList.remove('printing');
   wrap.innerHTML = '';
 }
 
@@ -672,7 +667,9 @@ function printAll() {
   wrap.innerHTML = window._cls_state.students
     .map(s => buildReportCard(s))
     .join('');
+  document.body.classList.add('printing');
   window.print();
+  document.body.classList.remove('printing');
   wrap.innerHTML = '';
 }
 
