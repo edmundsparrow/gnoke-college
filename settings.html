@@ -590,22 +590,62 @@ function initImport() {
   }
 }
 
+/* ── Fresh DB builders — never read a potentially bad binary ── */
+function freshStudentsDb() {
+  const db = new SQL.Database();
+  CLASSES_ALL.forEach(cls => {
+    db.run(`CREATE TABLE IF NOT EXISTS "${cls}" (
+      id TEXT PRIMARY KEY, name TEXT NOT NULL, sex TEXT,
+      dob TEXT, guardian TEXT, phone TEXT, nationality TEXT, created_at TEXT
+    )`);
+  });
+  return db;
+}
+
+function freshTeachersDb() {
+  const db = new SQL.Database();
+  db.run(`CREATE TABLE IF NOT EXISTS teachers (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    role       TEXT, subject TEXT, classes TEXT,
+    name       TEXT, email TEXT UNIQUE, username TEXT UNIQUE,
+    password   TEXT, secret TEXT, created_at TEXT
+  )`);
+  return db;
+}
+
+function freshScoresDb() {
+  const db = new SQL.Database();
+  db.run(`CREATE TABLE IF NOT EXISTS scores (
+    id               TEXT PRIMARY KEY,
+    student_id       TEXT NOT NULL,
+    student_name     TEXT NOT NULL,
+    class_level      TEXT NOT NULL,
+    subject          TEXT NOT NULL,
+    teacher_username TEXT,
+    term             TEXT NOT NULL,
+    session          TEXT NOT NULL,
+    cat1 REAL, cat2 REAL, assignment REAL,
+    note REAL, cw REAL, exams REAL,
+    total REAL, grade TEXT, updated_at TEXT
+  )`);
+  return db;
+}
+
 /* ── Danger zone ── */
 async function clearDb(cfg, label) {
-  const blob = await idbGet(cfg.idb, cfg.store, cfg.key).catch(() => null);
-  if (!blob || !SQL) { toast.warning('Already empty', `${label} has no data.`); return; }
-  const db = new SQL.Database(new Uint8Array(blob));
-  if (cfg === DB_CFGS.students) {
-    CLASSES_ALL.forEach(cls => { try { db.run(`DELETE FROM "${cls}"`); } catch {} });
-  } else {
-    try {
-      if (cfg === DB_CFGS.teachers) db.run('DELETE FROM teachers');
-      if (cfg === DB_CFGS.scores)   db.run('DELETE FROM scores');
-    } catch(e) { toast.error('Error', e.message); return; }
+  if (!SQL) { toast.warning('Not ready', 'Database engine not loaded.'); return; }
+  try {
+    let fresh;
+    if      (cfg === DB_CFGS.students) fresh = freshStudentsDb();
+    else if (cfg === DB_CFGS.scores)   fresh = freshScoresDb();
+    else { toast.error('Error', 'Unknown target database.'); return; }
+
+    await idbSet(cfg.idb, cfg.store, cfg.key, fresh.export());
+    toast.success('Cleared', `${label} has been cleared.`);
+    await checkDbStatus();
+  } catch(e) {
+    toast.error('Clear failed', e.message);
   }
-  await idbSet(cfg.idb, cfg.store, cfg.key, db.export());
-  toast.success('Cleared', `${label} has been cleared.`);
-  await checkDbStatus();
 }
 
 /* ── DOMContentLoaded ── */
@@ -677,22 +717,17 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
   document.getElementById('reset-all-btn').addEventListener('click', async () => {
     if (!await confirm_modal('Reset Everything', 'This wipes ALL data. Are you sure?', 'Reset Everything', 'btn-danger')) return;
-    for (const [, cfg] of Object.entries(DB_CFGS)) {
-      const blob = await idbGet(cfg.idb, cfg.store, cfg.key).catch(() => null);
-      if (blob && SQL) {
-        const db = new SQL.Database(new Uint8Array(blob));
-        try {
-          if (cfg === DB_CFGS.students) CLASSES_ALL.forEach(cls => { try { db.run(`DELETE FROM "${cls}"`); } catch {} });
-          if (cfg === DB_CFGS.teachers) db.run('DELETE FROM teachers');
-          if (cfg === DB_CFGS.scores)   db.run('DELETE FROM scores');
-          await idbSet(cfg.idb, cfg.store, cfg.key, db.export());
-        } catch {}
-      }
+    try {
+      await idbSet(DB_CFGS.students.idb, DB_CFGS.students.store, DB_CFGS.students.key, freshStudentsDb().export());
+      await idbSet(DB_CFGS.scores.idb,   DB_CFGS.scores.store,   DB_CFGS.scores.key,   freshScoresDb().export());
+      await idbSet(DB_CFGS.teachers.idb, DB_CFGS.teachers.store, DB_CFGS.teachers.key, freshTeachersDb().export());
+      await idbSet(CFG_IDB.name, CFG_IDB.store, CFG_IDB.key, {});
+      toast.success('Reset complete', 'All data cleared. Create a new admin account on next login.');
+      await checkDbStatus();
+      await populateForms();
+    } catch(e) {
+      toast.error('Reset failed', e.message);
     }
-    await idbSet(CFG_IDB.name, CFG_IDB.store, CFG_IDB.key, {});
-    toast.success('Reset complete', 'All data cleared.');
-    await checkDbStatus();
-    await populateForms();
   });
 });
 </script>
