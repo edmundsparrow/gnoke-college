@@ -137,6 +137,14 @@
   </style>
 </head>
 <body>
+<script>
+(function(){
+  var s = sessionStorage.getItem('gnoke_school_session');
+  if (!s) { location.replace('login.html'); return; }
+  try { if (JSON.parse(s).role !== 'Other') location.replace('login.html'); }
+  catch { location.replace('login.html'); }
+})();
+</script>
 
 <div id="boot-screen">
   <div class="boot-logo">School Management</div>

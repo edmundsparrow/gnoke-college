@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sign In — Gnoke College</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.2/sql-wasm.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Nunito:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="icon" type="image/png" href="global.png">
+  <link rel="manifest" href="manifest.json">
+  <style>
+    :root {
+      --bg: #f4f7f5; --text: #111c14; --text-3: #7a9080;
+      --accent: #166534; --accent-h: #14532d;
+      --border: #ddeae2; --surface: #ffffff;
+      --error: #b91c1c; --error-bg: #fee2e2;
+      --warn: #92400e; --warn-bg: #fef3c7;
+      --ok-bg: #dcfce7;
+      --r: 8px; --r-lg: 12px;
+      --sh: 0 4px 20px rgba(0,0,0,.08);
+      --font-d: 'Playfair Display', serif;
+      --font-s: 'Nunito', sans-serif;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: var(--font-s); background: var(--bg); color: var(--text);
+      min-height: 100vh; display: flex; align-items: center;
+      justify-content: center; padding: 24px;
+    }
+
+    /* ── Boot overlay ── */
+    #boot {
+      position: fixed; inset: 0; background: var(--bg);
+      display: flex; flex-direction: column; align-items: center;
+      justify-content: center; gap: 14px; z-index: 100;
+      transition: opacity .3s ease;
+    }
+    #boot.hidden { opacity: 0; pointer-events: none; }
+    .boot-logo { font-family: var(--font-d); font-size: 1.6rem; font-weight: 700; color: var(--accent); }
+    .boot-sub  { font-size: .82rem; color: var(--text-3); }
+    .spinner {
+      width: 28px; height: 28px;
+      border: 2.5px solid var(--border); border-top-color: var(--accent);
+      border-radius: 50%; animation: spin 700ms linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Card ── */
+    .card {
+      background: var(--surface); border: 1.5px solid var(--border);
+      border-radius: var(--r-lg); padding: 36px 32px;
+      width: 100%; max-width: 400px; box-shadow: var(--sh);
+    }
+    .brand-name {
+      font-family: var(--font-d); font-size: 1.7rem;
+      font-weight: 700; color: var(--accent); margin-bottom: 3px;
+    }
+    .brand-sub {
+      font-size: .76rem; color: var(--text-3);
+      letter-spacing: .04em; margin-bottom: 28px;
+    }
+
+    /* ── Fields ── */
+    .field + .field { margin-top: 14px; }
+    label {
+      display: block; font-size: .68rem; font-weight: 700;
+      text-transform: uppercase; letter-spacing: .08em;
+      color: var(--text-3); margin-bottom: 5px;
+    }
+    input {
+      width: 100%; padding: 11px 12px; border: 1.5px solid var(--border);
+      border-radius: var(--r); background: #f1f5f2; color: var(--text);
+      font-size: .9rem; font-family: var(--font-s); outline: none;
+      transition: border-color .15s, box-shadow .15s;
+    }
+    input:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(22,101,52,.1);
+      background: #fff;
+    }
+    .pw-wrap { position: relative; }
+    .pw-wrap input { padding-right: 38px; }
+    .pw-eye {
+      position: absolute; right: 10px; top: 50%;
+      transform: translateY(-50%); background: none; border: none;
+      cursor: pointer; font-size: .9rem; color: var(--text-3);
+      font-family: inherit;
+    }
+
+    /* ── Messages ── */
+    .msg {
+      font-size: .78rem; margin-top: 8px;
+      padding: 9px 11px; border-radius: var(--r);
+      line-height: 1.5; display: none;
+    }
+    .msg.show    { display: block; }
+    .msg.error   { color: var(--error);  background: var(--error-bg); }
+    .msg.success { color: var(--accent); background: var(--ok-bg); font-weight: 600; }
+
+    /* ── First-run notice ── */
+    .setup-notice {
+      display: flex; align-items: flex-start; gap: 10px;
+      background: var(--warn-bg); border: 1.5px solid #fcd34d;
+      border-radius: var(--r); padding: 12px 14px; margin-bottom: 24px;
+      font-size: .8rem; line-height: 1.6; color: var(--warn);
+    }
+    .setup-notice-icon { font-size: 1rem; flex-shrink: 0; margin-top: 2px; }
+    .setup-notice strong { color: #78350f; }
+
+    /* ── Hint text ── */
+    .field-hint {
+      font-size: .7rem; color: var(--text-3); margin-top: 4px;
+    }
+
+    /* ── Submit ── */
+    .btn-submit {
+      width: 100%; margin-top: 22px; padding: 13px;
+      background: var(--accent); color: #fff; border: none;
+      border-radius: var(--r); font-family: var(--font-s);
+      font-size: .92rem; font-weight: 700; cursor: pointer;
+      transition: background .15s, opacity .15s;
+    }
+    .btn-submit:hover    { background: var(--accent-h); }
+    .btn-submit:active   { opacity: .88; }
+    .btn-submit:disabled { opacity: .6; cursor: not-allowed; }
+
+    /* ── Footer ── */
+    .card-footer {
+      margin-top: 20px; font-size: .72rem;
+      color: var(--text-3); text-align: center;
+    }
+  </style>
+</head>
+<body>
+
+<!-- Boot -->
+<div id="boot">
+  <div class="boot-logo">Gnoke College</div>
+  <div class="boot-sub">Loading…</div>
+  <div class="spinner"></div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════
+     SETUP CARD — shown only when no admin exists
+     ═══════════════════════════════════════════ -->
+<div class="card" id="setup-card" style="display:none">
+  <div class="brand-name">Gnoke College</div>
+  <div class="brand-sub">First-Run Setup</div>
+
+  <div class="setup-notice">
+    <span class="setup-notice-icon">⚙️</span>
+    <div>
+      <strong>No administrator account found.</strong><br>
+      Create your admin account below to get started.
+      This form disappears permanently once an admin exists.
+    </div>
+  </div>
+
+  <div class="field">
+    <label for="s-name">Full Name *</label>
+    <input type="text" id="s-name" placeholder="e.g. Amina Yusuf" autocomplete="name">
+  </div>
+
+  <div class="field">
+    <label for="s-user">Username *</label>
+    <input type="text" id="s-user" placeholder="e.g. amina.yusuf" autocomplete="username">
+  </div>
+
+  <div class="field">
+    <label for="s-pass">Password * (6 digits)</label>
+    <div class="pw-wrap">
+      <input type="password" id="s-pass" placeholder="••••••"
+             maxlength="6" inputmode="numeric" autocomplete="new-password">
+      <button class="pw-eye" type="button" onclick="toggleEye('s-pass')">👁</button>
+    </div>
+    <div class="field-hint">Must be exactly 6 digits.</div>
+  </div>
+
+  <div class="field">
+    <label for="s-confirm">Confirm Password *</label>
+    <div class="pw-wrap">
+      <input type="password" id="s-confirm" placeholder="••••••"
+             maxlength="6" inputmode="numeric" autocomplete="new-password">
+      <button class="pw-eye" type="button" onclick="toggleEye('s-confirm')">👁</button>
+    </div>
+  </div>
+
+  <div class="msg error" id="setup-err"></div>
+
+  <button class="btn-submit" id="btn-setup">Create Admin Account</button>
+
+  <div class="card-footer">Gnoke Suite · Offline-first · No server required</div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════
+     LOGIN CARD — normal sign in
+     ═══════════════════════════════════════════ -->
+<div class="card" id="login-card" style="display:none">
+  <div class="brand-name">Gnoke College</div>
+  <div class="brand-sub">School Management System</div>
+
+  <!-- Shown after first-run setup completes -->
+  <div class="msg success" id="login-success" style="margin-bottom:16px"></div>
+
+  <div class="field">
+    <label for="inp-user">Username</label>
+    <input type="text" id="inp-user" placeholder="Your username" autocomplete="username">
+  </div>
+
+  <div class="field">
+    <label for="inp-pass">Password</label>
+    <div class="pw-wrap">
+      <input type="password" id="inp-pass" placeholder="6-digit password"
+             maxlength="6" autocomplete="current-password">
+      <button class="pw-eye" type="button" onclick="toggleEye('inp-pass')">👁</button>
+    </div>
+    <div class="msg error" id="login-err"></div>
+  </div>
+
+  <button class="btn-submit" id="btn-login">Sign In</button>
+
+  <div class="card-footer">Gnoke Suite · Offline-first · No server required</div>
+</div>
+
+
+<script>
+/* ═══════════════════════════════════════════════════════
+   Skip login if session already valid
+═══════════════════════════════════════════════════════ */
+(function () {
+  var s = sessionStorage.getItem('gnoke_school_session');
+  if (!s) return;
+  try {
+    var r = JSON.parse(s).role;
+    if      (r === 'Subject Teacher') location.replace('stss.html');
+    else if (r === 'Class Teacher')   location.replace('clteach.html');
+    else if (r === 'Other')           location.replace('index.html');
+  } catch {}
+})();
+
+/* ═══════════════════════════════════════════════════════
+   IDB helpers — self-contained, no sch.js needed
+═══════════════════════════════════════════════════════ */
+const IDB_NAME  = 'subteach_app';
+const IDB_STORE = 'database';
+const IDB_KEY   = 'db';
+
+function idbOpen() {
+  return new Promise((res, rej) => {
+    const req = indexedDB.open(IDB_NAME, 1);
+    req.onupgradeneeded = e => e.target.result.createObjectStore(IDB_STORE);
+    req.onsuccess       = e => res(e.target.result);
+    req.onerror         = () => rej(req.error);
+  });
+}
+async function idbLoad() {
+  const db = await idbOpen();
+  return new Promise((res, rej) => {
+    const req = db.transaction(IDB_STORE, 'readonly')
+                  .objectStore(IDB_STORE).get(IDB_KEY);
+    req.onsuccess = () => res(req.result || null);
+    req.onerror   = () => rej(req.error);
+  });
+}
+async function idbSave(data) {
+  const db = await idbOpen();
+  return new Promise((res, rej) => {
+    const req = db.transaction(IDB_STORE, 'readwrite')
+                  .objectStore(IDB_STORE).put(data, IDB_KEY);
+    req.onsuccess = () => res();
+    req.onerror   = () => rej(req.error);
+  });
+}
+
+/* ═══════════════════════════════════════════════════════
+   State
+═══════════════════════════════════════════════════════ */
+let SQL = null, teachersDB = null;
+
+/* ═══════════════════════════════════════════════════════
+   Does any Other-role (admin) account exist?
+═══════════════════════════════════════════════════════ */
+function hasAdmin() {
+  if (!teachersDB) return false;
+  try {
+    const r = teachersDB.exec(`SELECT COUNT(*) FROM teachers WHERE role='Other'`);
+    return r.length && r[0].values[0][0] > 0;
+  } catch { return false; }
+}
+
+/* ═══════════════════════════════════════════════════════
+   Boot
+═══════════════════════════════════════════════════════ */
+window.addEventListener('DOMContentLoaded', async () => {
+  try {
+    SQL = await initSqlJs({
+      locateFile: f => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.2/${f}`
+    });
+    const blob = await idbLoad();
+    if (blob) teachersDB = new SQL.Database(new Uint8Array(blob));
+  } catch (e) {
+    console.warn('[login] DB load error', e);
+  }
+
+  const boot = document.getElementById('boot');
+  boot.classList.add('hidden');
+  setTimeout(() => {
+    boot.style.display = 'none';
+    if (!hasAdmin()) {
+      /* First run — show setup */
+      document.getElementById('setup-card').style.display = 'block';
+      document.getElementById('s-name').focus();
+    } else {
+      /* Normal flow */
+      document.getElementById('login-card').style.display = 'block';
+      document.getElementById('inp-user').focus();
+    }
+  }, 300);
+});
+
+/* ═══════════════════════════════════════════════════════
+   Toggle password eye
+═══════════════════════════════════════════════════════ */
+function toggleEye(id) {
+  const inp = document.getElementById(id);
+  inp.type  = inp.type === 'password' ? 'text' : 'password';
+}
+
+/* ═══════════════════════════════════════════════════════
+   SETUP — create first admin account
+═══════════════════════════════════════════════════════ */
+async function doSetup() {
+  const errEl   = document.getElementById('setup-err');
+  const btn     = document.getElementById('btn-setup');
+  errEl.classList.remove('show');
+
+  const name     = document.getElementById('s-name').value.trim();
+  const username = document.getElementById('s-user').value.trim();
+  const password = document.getElementById('s-pass').value.trim();
+  const confirm  = document.getElementById('s-confirm').value.trim();
+
+  /* Validate */
+  if (!name)                       return setErr(errEl, 'Full name is required.');
+  if (!username)                   return setErr(errEl, 'Username is required.');
+  if (!/^\d{6}$/.test(password))   return setErr(errEl, 'Password must be exactly 6 digits.');
+  if (password !== confirm)        return setErr(errEl, 'Passwords do not match.');
+
+  btn.disabled    = true;
+  btn.textContent = 'Creating account…';
+
+  try {
+    /* Initialise DB + table if starting from scratch */
+    if (!teachersDB) teachersDB = new SQL.Database();
+
+    teachersDB.run(`
+      CREATE TABLE IF NOT EXISTS teachers (
+        id         INTEGER PRIMARY KEY AUTOINCREMENT,
+        role       TEXT,
+        subject    TEXT,
+        classes    TEXT,
+        name       TEXT,
+        email      TEXT UNIQUE,
+        username   TEXT UNIQUE,
+        password   TEXT,
+        secret     TEXT,
+        created_at TEXT
+      )
+    `);
+
+    /* Username uniqueness check */
+    const dup = teachersDB.exec(
+      `SELECT COUNT(*) FROM teachers WHERE username=?`, [username]
+    );
+    if (dup.length && dup[0].values[0][0] > 0) {
+      btn.disabled    = false;
+      btn.textContent = 'Create Admin Account';
+      return setErr(errEl, 'That username is already taken.');
+    }
+
+    /* Insert the admin row */
+    teachersDB.run(
+      `INSERT INTO teachers
+         (role, subject, classes, name, email, username, password, secret, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ['Other', 'School Administrator', 'N/A', name,
+       null, username, password, null, new Date().toISOString()]
+    );
+
+    /* Persist to IDB */
+    await idbSave(teachersDB.export());
+
+    /* Transition to login card with success message */
+    document.getElementById('setup-card').style.display = 'none';
+    document.getElementById('login-card').style.display = 'block';
+
+    const ok = document.getElementById('login-success');
+    ok.textContent = `✓ Admin account created. Sign in as "${username}".`;
+    ok.classList.add('show');
+
+    /* Pre-fill username so it's one less field to type */
+    document.getElementById('inp-user').value = username;
+    document.getElementById('inp-pass').focus();
+
+  } catch (err) {
+    btn.disabled    = false;
+    btn.textContent = 'Create Admin Account';
+    setErr(errEl, `Could not create account: ${err.message}`);
+  }
+}
+
+/* ═══════════════════════════════════════════════════════
+   LOGIN — verify and redirect
+═══════════════════════════════════════════════════════ */
+function doLogin() {
+  const errEl    = document.getElementById('login-err');
+  const btn      = document.getElementById('btn-login');
+  const username = document.getElementById('inp-user').value.trim();
+  const password = document.getElementById('inp-pass').value.trim();
+
+  errEl.classList.remove('show');
+
+  if (!username || !password) {
+    return setErr(errEl, 'Please enter your username and password.');
+  }
+  if (!teachersDB) {
+    return setErr(errEl, 'Staff database not found. Complete first-run setup first.');
+  }
+
+  const teacher = verifyCredentials(username, password);
+
+  if (!teacher) {
+    document.getElementById('inp-pass').value = '';
+    document.getElementById('inp-pass').focus();
+    return setErr(errEl, 'Invalid username or password.');
+  }
+
+  sessionStorage.setItem('gnoke_school_session', JSON.stringify(teacher));
+
+  btn.disabled    = true;
+  btn.textContent = 'Signing in…';
+
+  if      (teacher.role === 'Subject Teacher') location.replace('stss.html');
+  else if (teacher.role === 'Class Teacher')   location.replace('clteach.html');
+  else if (teacher.role === 'Other')           location.replace('index.html');
+  else {
+    sessionStorage.removeItem('gnoke_school_session');
+    btn.disabled    = false;
+    btn.textContent = 'Sign In';
+    setErr(errEl, 'Account role not recognised. Contact your administrator.');
+  }
+}
+
+function verifyCredentials(username, password) {
+  try {
+    const r = teachersDB.exec(
+      `SELECT id, role, subject, classes, name, username
+       FROM teachers WHERE username=? AND password=?`,
+      [username, password]
+    );
+    if (!r.length || !r[0].values.length) return null;
+    const [id, role, subject, classes, name, uname] = r[0].values[0];
+    return { id, role, subject, classes, name, username: uname };
+  } catch { return null; }
+}
+
+/* ═══════════════════════════════════════════════════════
+   Helpers
+═══════════════════════════════════════════════════════ */
+function setErr(el, msg) {
+  el.textContent = msg;
+  el.classList.add('show');
+}
+
+/* ═══════════════════════════════════════════════════════
+   Event wiring
+═══════════════════════════════════════════════════════ */
+document.getElementById('btn-setup').addEventListener('click', doSetup);
+document.getElementById('btn-login').addEventListener('click', doLogin);
+
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Enter') return;
+  if (document.getElementById('setup-card').style.display !== 'none') doSetup();
+  else doLogin();
+});
+</script>
+</body>
+</html>

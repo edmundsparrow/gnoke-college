@@ -266,6 +266,14 @@
   </style>
 </head>
 <body>
+<script>
+(function(){
+  var s = sessionStorage.getItem('gnoke_school_session');
+  if (!s) { location.replace('login.html'); return; }
+  try { if (JSON.parse(s).role !== 'Other') location.replace('login.html'); }
+  catch { location.replace('login.html'); }
+})();
+</script>
 
 <!-- Boot screen hides immediately for this static page -->
 <div id="boot-screen">
@@ -406,7 +414,7 @@
         <div class="author-name">Edmund Sparrow</div>
         <div class="author-role">Part of the Gnoke Suite — offline-first tools for developers, retailers, and independent builders.</div>
         <div class="author-links">
-          <a class="btn btn-ghost btn-sm" href="mailto:edmundsparrow@gmail.com">✉ Email</a>
+          <a class="btn btn-ghost btn-sm" href="/cdn-cgi/l/email-protection#3356575e465d5740435241415c4473545e525a5f1d505c5e">✉ Email</a>
           <a class="btn btn-ghost btn-sm" href="https://github.com/edmundsparrow" target="_blank" rel="noopener">⌥ GitHub</a>
           <a class="btn btn-ghost btn-sm" href="https://selar.com/showlove/edmundsparrow" target="_blank" rel="noopener">❤ Coffee</a>
         </div>
@@ -462,7 +470,7 @@
 </div>
 
 <div id="toast-root"></div>
-<script src="sch.js"></script>
+<script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script><script src="sch.js"></script>
 <script src="menu.js"></script>
 <script>
 /* Show the page immediately — no DB needed for About */
@@ -610,14 +618,3 @@ const Updater = (() => {
     } finally {
       btn.disabled = false;
       btn.textContent = '🔄 Check for Updates';
-    }
-  }
-
-  return { check };
-})();
-
-document.getElementById('btn-check-update')
-  ?.addEventListener('click', Updater.check);
-</script>
-</body>
-</html>

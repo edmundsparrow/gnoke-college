@@ -142,6 +142,17 @@ body {
   cursor: pointer;
 }
 
+.portal-theme { top: 20px; right: 20px; }
+
+.logout-btn {
+  position: fixed; top: 20px; right: 68px;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 50%; width: 40px; height: 40px;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; color: var(--text-3); transition: all 150ms;
+}
+.logout-btn:hover { border-color: #dc2626; color: #dc2626; background: #fff5f5; }
+
 .install-btn {
   display: none;
   align-items: center;
@@ -167,8 +178,19 @@ body {
 </head>
 
 <body>
+<script>
+(function(){
+  var s = sessionStorage.getItem('gnoke_school_session');
+  if (!s) { location.replace('login.html'); return; }
+  try { if (JSON.parse(s).role !== 'Other') location.replace('login.html'); }
+  catch { location.replace('login.html'); }
+})();
+</script>
 
 <button class="theme-btn portal-theme" onclick="toggleTheme()"></button>
+<button class="logout-btn" id="portal-logout" onclick="portalLogout()" title="Sign out">
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/></svg>
+</button>
 
 <div class="portal">
   <div class="portal-brand">
@@ -178,7 +200,7 @@ body {
 
   <div class="portal-cards">
 
-    <a href="student.html" class="portal-card" onclick="sav7eLast('student.html')">
+    <a href="student.html" class="portal-card" onclick="saveLast('student.html')">
       <div class="portal-card-icon">🎓</div>
       <div>
         <div class="portal-card-title">Student Registration</div>
@@ -233,6 +255,11 @@ function toggleTheme() {
   document.documentElement.setAttribute('data-theme', next);
   localStorage.setItem(THEME_KEY, next);
   location.reload();
+}
+
+function portalLogout() {
+  sessionStorage.removeItem('gnoke_school_session');
+  location.replace('login.html');
 }
 
 function saveLast(page) {

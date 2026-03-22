@@ -1,9 +1,11 @@
-/* Gnoke Ledger — Service Worker v0.3 */
-const CACHE = 'gnoke-college-v0.4';
+/* Gnoke College — Service Worker v0.5 */
+const CACHE = 'gnoke-college-v0.5';
 const ASSETS = [
   './',
   './index.html',
+  './login.html',
   './about.html',
+  './clteach.html',
   './print.html',
   './registration.html',
   './results.html',

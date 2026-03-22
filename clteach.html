@@ -1,0 +1,734 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Class Teacher — School Management</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.2/sql-wasm.js"></script>
+  <link rel="stylesheet" href="sch.css">
+  <style>
+    body { display: flex; }
+
+    /* ── Controls bar ── */
+    .controls-bar {
+      display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+      padding: 10px 20px; border-bottom: 1px solid var(--border);
+      background: var(--card-bg);
+    }
+    .ctrl-sep { width: 1px; height: 22px; background: var(--border-2); flex-shrink: 0; }
+    .ctrl-label { font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--text-muted); }
+
+    /* ── Class badge in topbar ── */
+    .class-badge {
+      background: var(--primary-bg); color: var(--primary);
+      padding: 3px 10px; border-radius: 999px;
+      font-size: 0.78rem; font-weight: 700; letter-spacing: .04em;
+    }
+
+    /* ── Stats chips ── */
+    .stats-row { display: flex; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; }
+    .stat-chip {
+      background: var(--card-bg); border: 1px solid var(--border);
+      border-radius: 8px; padding: 10px 16px;
+      display: flex; flex-direction: column; align-items: center; gap: 2px;
+      box-shadow: var(--sh-sm); min-width: 86px;
+    }
+    .stat-chip-val { font-family: serif; font-size: 1.3rem; font-weight: 700; color: var(--primary); line-height: 1; }
+    .stat-chip-lbl { font-size: 0.62rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: .08em; }
+
+    /* ── Broadsheet table ── */
+    .results-area { flex: 1; overflow-x: auto; padding: 20px; }
+
+    .bs-wrap {
+      background: var(--card-bg); border: 1px solid var(--border);
+      border-radius: var(--r-lg); overflow: hidden; box-shadow: var(--sh-sm);
+      min-width: 640px;
+    }
+    .bs-toolbar {
+      padding: 13px 18px; display: flex; align-items: center;
+      justify-content: space-between; border-bottom: 1px solid var(--border);
+      flex-wrap: wrap; gap: 10px;
+    }
+    .bs-title { font-family: serif; font-size: 1rem; font-weight: 700; color: var(--text); }
+    .bs-meta  { font-size: 0.76rem; color: var(--text-muted); }
+
+    table.bs-table { width: 100%; border-collapse: collapse; font-size: 0.84rem; }
+    table.bs-table thead tr.hdr-top th {
+      background: var(--primary); color: #fff;
+      font-size: 0.72rem; font-weight: 700; font-family: serif;
+      padding: 8px 6px; text-align: center;
+      border: 1px solid rgba(255,255,255,.2);
+    }
+    table.bs-table thead tr.hdr-sub th {
+      background: #ede9df; color: #777;
+      font-size: 0.62rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: .07em; padding: 6px; text-align: center;
+      border: 1px solid var(--border-2);
+    }
+    table.bs-table tbody tr {
+      border-bottom: 1px solid var(--border);
+      transition: background 120ms; cursor: pointer;
+    }
+    table.bs-table tbody tr:last-child { border-bottom: none; }
+    table.bs-table tbody tr:hover { background: #eef7f2; }
+    table.bs-table td {
+      padding: 11px 6px; text-align: center;
+      font-size: 0.84rem; color: var(--text-mid);
+      border-right: 1px solid var(--border);
+    }
+    table.bs-table td:last-child { border-right: none; }
+    table.bs-table td.td-sn   { color: var(--text-muted); font-size: 0.76rem; width: 36px; }
+    table.bs-table td.td-name {
+      text-align: left; padding-left: 14px;
+      font-weight: 600; color: var(--primary);
+      text-decoration: underline dotted; white-space: nowrap;
+    }
+    table.bs-table td.td-avg  { font-weight: 700; color: var(--primary); background: #f0f7f2; }
+    table.bs-table td.td-pos  { font-weight: 700; color: var(--primary); }
+
+    .grade-A { color: #15803d; font-weight: 700; }
+    .grade-B { color: #2563eb; font-weight: 700; }
+    .grade-C { color: #d97706; font-weight: 700; }
+    .grade-D { color: #9333ea; font-weight: 700; }
+    .grade-F { color: #b91c1c; font-weight: 700; }
+
+    .placeholder-row td {
+      padding: 70px 20px; color: var(--text-muted);
+      font-style: italic; font-size: 0.88rem; text-align: center;
+    }
+
+    /* ── Report card modal ── */
+    .rc-overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,.5);
+      z-index: 9000; display: flex; align-items: flex-start;
+      justify-content: center; padding: 20px; overflow-y: auto;
+    }
+    .rc-modal {
+      background: #f0ece4; border-radius: var(--r-lg);
+      width: 100%; max-width: 760px;
+      box-shadow: 0 12px 48px rgba(0,0,0,.28);
+      animation: modal-in 200ms ease;
+    }
+    @keyframes modal-in { from { opacity: 0; transform: scale(.97); } }
+
+    .rc-modal-bar {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 12px 18px; background: var(--card-bg);
+      border-bottom: 1px solid var(--border);
+      border-radius: var(--r-lg) var(--r-lg) 0 0;
+    }
+    .rc-modal-bar-title { font-family: serif; font-size: 1rem; font-weight: 700; color: var(--text); }
+    .rc-modal-actions { display: flex; gap: 8px; align-items: center; }
+    .rc-modal-body { padding: 20px; }
+
+    /* ── Report card (print.html style, self-contained) ── */
+    .report-card {
+      width: 100%; background: #fff;
+      padding: 10mm 9mm 8mm;
+      font-family: 'Times New Roman', serif;
+      font-size: 9.5pt; color: #000;
+      box-shadow: 0 2px 12px rgba(0,0,0,.12);
+      border-radius: 4px;
+    }
+    .rc-school-name {
+      text-align: center; font-size: 15pt; font-weight: 700;
+      text-transform: uppercase; letter-spacing: .04em;
+      border-bottom: 2.5px double #000; padding-bottom: 4px; margin-bottom: 4px;
+    }
+    .rc-subtitle {
+      text-align: center; font-size: 9pt; color: #444;
+      margin-bottom: 8px; text-transform: uppercase; letter-spacing: .06em;
+    }
+    .rc-meta-row {
+      display: flex; justify-content: space-between; align-items: baseline;
+      border: 1px solid #000; padding: 4px 8px; margin-bottom: 3px;
+      font-size: 9pt;
+    }
+    .rc-meta-row span { flex: 1; }
+    .rc-meta-row span + span { text-align: center; }
+    .rc-meta-row span:last-child { text-align: right; }
+    .rc-name-row {
+      border: 1px solid #000; border-top: none;
+      padding: 5px 8px; margin-bottom: 6px;
+      font-size: 10pt; font-weight: 700; text-transform: uppercase;
+    }
+    .rc-table { width: 100%; border-collapse: collapse; margin-bottom: 6px; }
+    .rc-table th, .rc-table td {
+      border: 1px solid #000; padding: 3px 5px;
+      font-size: 8.5pt; text-align: center;
+    }
+    .rc-table th { background: #f0f0f0; font-weight: 700; text-transform: uppercase; font-size: 7.5pt; }
+    .rc-table td.subj { text-align: left; font-weight: 600; }
+    .rc-table td.total-col { font-weight: 700; }
+    .rc-table td.grade-col { font-weight: 700; }
+    .rc-table .social-th { background: #e8e8e8; }
+    .rc-footer {
+      display: grid; grid-template-columns: 1fr 1fr 1fr;
+      border: 1px solid #000; border-top: none; margin-bottom: 6px;
+    }
+    .rc-footer-cell {
+      padding: 4px 7px; border-right: 1px solid #000; font-size: 8.5pt;
+    }
+    .rc-footer-cell:last-child { border-right: none; }
+    .rc-footer-label { font-weight: 700; font-size: 7.5pt; text-transform: uppercase; }
+    .rc-footer-val   { font-size: 9pt; margin-top: 1px; min-height: 14px; }
+    .rc-comment-row {
+      display: flex; align-items: flex-start; gap: 8px;
+      border: 1px solid #000; border-top: none; padding: 4px 7px;
+      font-size: 8.5pt; min-height: 24px;
+    }
+    .rc-comment-label { font-weight: 700; white-space: nowrap; text-transform: uppercase; font-size: 7.5pt; min-width: 130px; }
+    .rc-comment-line  { flex: 1; border-bottom: 1px solid #aaa; min-height: 14px; }
+    .rc-sign          { white-space: nowrap; font-size: 7.5pt; font-weight: 700; margin-left: 8px; }
+    .rc-sign-line     { display: inline-block; width: 60px; border-bottom: 1px solid #000; margin-left: 4px; }
+    .rc-grade-key     { font-size: 7.5pt; }
+
+    /* ── Print ── */
+    @media print {
+      @page { size: A4; margin: 0; }
+      #boot-screen, .topnav, .controls-bar, .results-area,
+      .stats-row, .sidebar, #sb-overlay, .rc-overlay { display: none !important; }
+      .print-rc-wrap { display: block !important; }
+    }
+    .print-rc-wrap { display: none; }
+  </style>
+</head>
+<body>
+
+<div id="boot-screen">
+  <div class="boot-logo">Class Teacher</div>
+  <div class="boot-sub">Loading…</div>
+  <div class="spinner"></div>
+</div>
+
+<div class="content-wrap" id="app" style="display:none">
+
+  <!-- Topbar -->
+  <nav class="topnav">
+    <div class="nav-left">
+      <div class="hamburger" id="menuBtn">&#9776;</div>
+      <div>
+        <div style="font-family:serif;font-size:1rem;font-weight:700" id="t-name"></div>
+        <div style="font-size:.7rem;color:var(--text-muted)">Class Teacher</div>
+      </div>
+      <span class="class-badge" id="t-class"></span>
+    </div>
+    <div class="nav-right">
+      <button class="btn btn-secondary btn-sm" onclick="window.print()">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+        Print All
+      </button>
+      <button class="btn btn-ghost btn-sm" id="logout-btn">Logout</button>
+    </div>
+  </nav>
+
+  <!-- Controls -->
+  <div class="controls-bar">
+    <span class="ctrl-label">Term</span>
+    <select id="term-select" class="nav-select">
+      <option value="FIRST">1st Term</option>
+      <option value="SECOND">2nd Term</option>
+      <option value="THIRD">3rd Term</option>
+    </select>
+    <select id="session-select" class="nav-select"></select>
+    <div class="ctrl-sep"></div>
+    <button class="btn btn-secondary btn-sm" id="load-btn">Load Results</button>
+  </div>
+
+  <!-- Main -->
+  <div class="main-content" style="padding:0; max-width:none">
+    <div class="results-area">
+
+      <!-- Stats -->
+      <div class="stats-row" id="stats-row" style="display:none">
+        <div class="stat-chip"><div class="stat-chip-val" id="chip-students">—</div><div class="stat-chip-lbl">Students</div></div>
+        <div class="stat-chip"><div class="stat-chip-val" id="chip-subjects">—</div><div class="stat-chip-lbl">Subjects</div></div>
+        <div class="stat-chip"><div class="stat-chip-val grade-A" id="chip-a">0</div><div class="stat-chip-lbl">A Grade</div></div>
+        <div class="stat-chip"><div class="stat-chip-val grade-B" id="chip-b">0</div><div class="stat-chip-lbl">B Grade</div></div>
+        <div class="stat-chip"><div class="stat-chip-val grade-C" id="chip-c">0</div><div class="stat-chip-lbl">C Grade</div></div>
+        <div class="stat-chip"><div class="stat-chip-val grade-D" id="chip-d">0</div><div class="stat-chip-lbl">D Grade</div></div>
+        <div class="stat-chip"><div class="stat-chip-val grade-F" id="chip-f">0</div><div class="stat-chip-lbl">F Grade</div></div>
+      </div>
+
+      <!-- Broadsheet -->
+      <div class="bs-wrap">
+        <div class="bs-toolbar">
+          <div>
+            <div class="bs-title" id="bs-title">Select term and session, then click Load Results</div>
+            <div class="bs-meta" id="bs-meta">Click any student name to view their full report card</div>
+          </div>
+        </div>
+        <table class="bs-table">
+          <thead id="bs-thead"></thead>
+          <tbody id="bs-tbody">
+            <tr class="placeholder-row">
+              <td colspan="6">Select term and session above, then click Load Results.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+
+<!-- Hidden print container — populated when Print All is triggered -->
+<div class="print-rc-wrap" id="print-rc-wrap"></div>
+
+<div id="toast-root"></div>
+
+<script src="sch.js"></script>
+<script>
+/* ══════════════════════════════════════════════════════
+   IDB / settings config
+══════════════════════════════════════════════════════ */
+const IDB = {
+  students: { name: 'StudentRegisterStorage', store: 'db_blobs', key: 'db' },
+  scores:   { name: 'sch_scores',             store: 'database', key: 'db' },
+  settings: { name: 'sch_settings',           store: 'config',   key: 'settings' },
+};
+
+const SOCIAL_TRAITS = [
+  'Punctuality','Neatness','Relationship','Leadership',
+  'Confidence','Obedience','Honesty','Skills','Politeness','Sports',
+];
+const GRADING = [
+  { grade:'A', range:'70 – 100', remark:'Excellent'  },
+  { grade:'B', range:'60 – 69',  remark:'Very Good'  },
+  { grade:'C', range:'50 – 59',  remark:'Good'       },
+  { grade:'D', range:'40 – 49',  remark:'Pass'       },
+  { grade:'F', range:'0 – 39',   remark:'Fail'       },
+];
+
+let SQL = null;
+let studentsDB = null, scoresDB = null;
+let teacher = null;
+let currentClass = null;
+let schoolName = 'School Management';
+
+/* ══════════════════════════════════════════════════════
+   Auth guard — read teacher from sessionStorage
+══════════════════════════════════════════════════════ */
+function getTeacher() {
+  try {
+    const raw = sessionStorage.getItem('gnoke_school_session');
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch { return null; }
+}
+
+/* ══════════════════════════════════════════════════════
+   Session / term from settings
+══════════════════════════════════════════════════════ */
+async function buildSessionFromSettings() {
+  const sel  = document.getElementById('session-select');
+  const term = document.getElementById('term-select');
+  let savedSession = null, savedTerm = null;
+  try {
+    const cfg = await idbGet(IDB.settings.name, IDB.settings.store, IDB.settings.key);
+    if (cfg?.session) savedSession = cfg.session;
+    if (cfg?.term)    savedTerm    = cfg.term;
+  } catch {}
+  const pivot = savedSession ? parseInt(savedSession.split('/')[0]) : new Date().getFullYear();
+  for (let y = pivot - 1; y <= pivot + 2; y++) {
+    const v = `${y}/${y + 1}`;
+    const o = document.createElement('option');
+    o.value = o.textContent = v;
+    if (v === savedSession) o.selected = true;
+    sel.appendChild(o);
+  }
+  if (!savedSession) sel.options[sel.options.length - 1].selected = true;
+  if (savedTerm) term.value = savedTerm;
+}
+
+/* ══════════════════════════════════════════════════════
+   Grade helpers
+══════════════════════════════════════════════════════ */
+function calcGrade(t) {
+  if (t == null || t === '') return '—';
+  const n = Number(t);
+  return n >= 70 ? 'A' : n >= 60 ? 'B' : n >= 50 ? 'C' : n >= 40 ? 'D' : 'F';
+}
+function calcRemark(g) {
+  return { A:'Excellent', B:'Very Good', C:'Good', D:'Pass', F:'Fail' }[g] || '—';
+}
+
+/* ══════════════════════════════════════════════════════
+   Data helpers
+══════════════════════════════════════════════════════ */
+function getStudents() {
+  if (!studentsDB || !currentClass) return [];
+  try {
+    const r = studentsDB.exec(`SELECT id, name, sex FROM "${currentClass}" ORDER BY name`);
+    return r.length ? r[0].values.map(([id,name,sex]) => ({id,name,sex})) : [];
+  } catch { return []; }
+}
+
+function getScoreMap(term, session) {
+  const map = {};
+  if (!scoresDB) return map;
+  try {
+    const r = scoresDB.exec(
+      `SELECT student_id, subject, cat1, cat2, assignment, note, cw, exams, total, grade
+       FROM scores WHERE class_level=? AND term=? AND session=?`,
+      [currentClass, term, session]
+    );
+    if (!r.length) return map;
+    r[0].values.forEach(([sid, subj, c1, c2, asgn, nt, cw, ex, tot, gr]) => {
+      if (!map[sid]) map[sid] = {};
+      map[sid][subj] = { cat1:c1, cat2:c2, assignment:asgn, note:nt, cw, exams:ex, total:tot, grade:gr };
+    });
+  } catch {}
+  return map;
+}
+
+function computePositions(students, scoreMap, subjects) {
+  const avgs = students.map(s => {
+    const vals = subjects.map(subj => scoreMap[s.id]?.[subj]?.total)
+                         .filter(v => v != null).map(Number);
+    return { id: s.id, avg: vals.length ? vals.reduce((a,b)=>a+b,0)/vals.length : 0 };
+  });
+  avgs.sort((a,b) => b.avg - a.avg);
+  const pos = {};
+  avgs.forEach((item,i) => { pos[item.id] = i + 1; });
+  return pos;
+}
+
+/* ══════════════════════════════════════════════════════
+   Broadsheet renderer
+══════════════════════════════════════════════════════ */
+function loadResults() {
+  const term    = document.getElementById('term-select').value;
+  const session = document.getElementById('session-select').value;
+  const termLabel = { FIRST:'First Term', SECOND:'Second Term', THIRD:'Third Term' }[term] || term;
+
+  const students = getStudents();
+  if (!students.length) {
+    toast.warning('No students', `No students registered in ${currentClass}.`);
+    return;
+  }
+
+  const scoreMap = getScoreMap(term, session);
+  const subjSet  = new Set();
+  Object.values(scoreMap).forEach(subs => Object.keys(subs).forEach(s => subjSet.add(s)));
+  const subjects = [...subjSet].sort();
+
+  if (!subjects.length) {
+    toast.warning('No scores', 'No scores found for this class / term / session.');
+    document.getElementById('bs-thead').innerHTML = '';
+    document.getElementById('bs-tbody').innerHTML =
+      '<tr class="placeholder-row"><td colspan="6">No scores found for this selection.</td></tr>';
+    document.getElementById('stats-row').style.display = 'none';
+    return;
+  }
+
+  const posMap = computePositions(students, scoreMap, subjects);
+
+  /* ── Header ── */
+  const thead = document.getElementById('bs-thead');
+  thead.innerHTML = `
+    <tr class="hdr-top">
+      <th rowspan="2">#</th>
+      <th rowspan="2" style="text-align:left;padding-left:14px;min-width:160px">Student Name</th>
+      ${subjects.map(s => `<th>${s}</th>`).join('')}
+      <th rowspan="2">Avg</th>
+      <th rowspan="2">Pos</th>
+    </tr>
+    <tr class="hdr-sub">
+      ${subjects.map(() => '<th>Total</th>').join('')}
+    </tr>`;
+
+  /* ── Body ── */
+  const sorted = [...students].sort((a,b) => (posMap[a.id]||999) - (posMap[b.id]||999));
+  const gradeCounts = { A:0, B:0, C:0, D:0, F:0 };
+
+  document.getElementById('bs-tbody').innerHTML = sorted.map((s, i) => {
+    const sScores = scoreMap[s.id] || {};
+    const totals  = subjects.map(subj => sScores[subj]?.total != null ? Number(sScores[subj].total) : null);
+    const entered = totals.filter(v => v !== null);
+    const avg     = entered.length ? (entered.reduce((a,b)=>a+b,0) / entered.length).toFixed(1) : '—';
+
+    totals.forEach(t => {
+      if (t !== null) { const g = calcGrade(t); if (g in gradeCounts) gradeCounts[g]++; }
+    });
+
+    const cells = subjects.map((subj, si) => {
+      const t = totals[si];
+      const g = t !== null ? calcGrade(t) : null;
+      return `<td class="${g ? 'grade-'+g : ''}">${t !== null ? t : '—'}</td>`;
+    }).join('');
+
+    return `<tr data-id="${s.id}" data-name="${s.name}" onclick="openReportCard('${s.id}','${s.name.replace(/'/g,"\\'")}')">
+      <td class="td-sn">${i+1}</td>
+      <td class="td-name">${s.name}</td>
+      ${cells}
+      <td class="td-avg">${avg}</td>
+      <td class="td-pos">${posMap[s.id] || '—'}</td>
+    </tr>`;
+  }).join('');
+
+  /* ── Title ── */
+  document.getElementById('bs-title').textContent  = `${currentClass} — ${termLabel} ${session}`;
+  document.getElementById('bs-meta').textContent   = `${students.length} students · ${subjects.length} subjects · click a name to view report card`;
+
+  /* ── Stats ── */
+  document.getElementById('chip-students').textContent = students.length;
+  document.getElementById('chip-subjects').textContent = subjects.length;
+  ['a','b','c','d','f'].forEach(g => {
+    document.getElementById(`chip-${g}`).textContent = gradeCounts[g.toUpperCase()] || 0;
+  });
+  document.getElementById('stats-row').style.display = 'flex';
+
+  /* Store for report card renderer */
+  window._cls_state = { students, scoreMap, subjects, posMap, term, session, termLabel };
+
+  toast.success('Loaded', `Results loaded for ${currentClass}.`);
+}
+
+/* ══════════════════════════════════════════════════════
+   Report card builder (single student, print.html style)
+══════════════════════════════════════════════════════ */
+function buildReportCard(student) {
+  const { scoreMap, subjects, posMap, students, termLabel, session } = window._cls_state;
+  const sScores  = scoreMap[student.id] || {};
+  const allTotals = subjects.map(subj => Number(sScores[subj]?.total) || 0).filter(v => v > 0);
+  const grandTotal = allTotals.reduce((a,b) => a+b, 0);
+  const average    = allTotals.length ? (grandTotal / allTotals.length).toFixed(1) : '—';
+  const position   = posMap[student.id] || '—';
+
+  const subjectRows = subjects.map((subj, idx) => {
+    const rec   = sScores[subj] || {};
+    const ca    = [rec.cat1, rec.cat2].filter(v => v != null && v !== '').map(Number);
+    const test  = ca.length ? ca.reduce((a,b) => a+b, 0) : '';
+    const grade = rec.grade || (rec.total != null ? calcGrade(rec.total) : '—');
+    const trait    = SOCIAL_TRAITS[idx] || '';
+    const gradeKey = GRADING[idx];
+    return `<tr>
+      <td class="subj">${subj.toUpperCase()}</td>
+      <td>${test !== '' ? test : '—'}</td>
+      <td>${rec.exams != null && rec.exams !== '' ? rec.exams : '—'}</td>
+      <td class="total-col">${rec.total != null && rec.total !== '' ? rec.total : '—'}</td>
+      <td class="grade-col">${grade}</td>
+      <td>${calcRemark(grade)}</td>
+      <td style="background:#fafafa;font-size:7.5pt">${trait}</td>
+      <td style="background:#fafafa"></td>
+      ${gradeKey
+        ? `<td class="rc-grade-key" style="background:#f5f5f5;font-weight:700">${gradeKey.grade}</td>
+           <td class="rc-grade-key" style="background:#f5f5f5">${gradeKey.range}</td>
+           <td class="rc-grade-key" style="background:#f5f5f5">${gradeKey.remark}</td>`
+        : `<td style="background:#f5f5f5"></td><td style="background:#f5f5f5"></td><td style="background:#f5f5f5"></td>`
+      }
+    </tr>`;
+  }).join('');
+
+  return `
+  <div class="report-card">
+    <div class="rc-school-name">${schoolName.toUpperCase()}</div>
+    <div class="rc-subtitle">Student Report Card</div>
+    <div class="rc-meta-row">
+      <span><b>CLASS:</b> ${currentClass}</span>
+      <span><b>TERM:</b> ${termLabel}</span>
+      <span><b>SESSION:</b> ${session}</span>
+    </div>
+    <div class="rc-name-row">STUDENT NAME: &nbsp;${student.name.toUpperCase()}</div>
+    <table class="rc-table">
+      <thead>
+        <tr>
+          <th rowspan="2" style="text-align:left;min-width:100px">Subject</th>
+          <th rowspan="2">Test<br>(30%)</th>
+          <th rowspan="2">Exam<br>(70%)</th>
+          <th rowspan="2">Total<br>(100%)</th>
+          <th rowspan="2">Grade</th>
+          <th rowspan="2">Remarks</th>
+          <th class="social-th" colspan="2">Social Traits</th>
+          <th class="rc-grade-key" colspan="3" style="background:#ebebeb">Grading Key</th>
+        </tr>
+        <tr>
+          <th class="social-th">Trait</th>
+          <th class="social-th">Rating</th>
+          <th class="rc-grade-key" style="background:#ebebeb">Grade</th>
+          <th class="rc-grade-key" style="background:#ebebeb">Score</th>
+          <th class="rc-grade-key" style="background:#ebebeb">Remark</th>
+        </tr>
+      </thead>
+      <tbody>${subjectRows}</tbody>
+      <tfoot>
+        <tr>
+          <td colspan="3" style="text-align:right;font-weight:700;font-size:8pt">TOTAL / AVERAGE</td>
+          <td class="total-col">${grandTotal || '—'}</td>
+          <td colspan="2" style="font-weight:700">${average}</td>
+          <td colspan="5"></td>
+        </tr>
+      </tfoot>
+    </table>
+    <div class="rc-footer">
+      <div class="rc-footer-cell">
+        <div class="rc-footer-label">Position in Class</div>
+        <div class="rc-footer-val">${position} of ${students.length}</div>
+      </div>
+      <div class="rc-footer-cell">
+        <div class="rc-footer-label">Subjects Offered</div>
+        <div class="rc-footer-val">${subjects.length}</div>
+      </div>
+      <div class="rc-footer-cell">
+        <div class="rc-footer-label">Status</div>
+        <div class="rc-footer-val"></div>
+      </div>
+      <div class="rc-footer-cell">
+        <div class="rc-footer-label">Fees Owed</div>
+        <div class="rc-footer-val"></div>
+      </div>
+      <div class="rc-footer-cell">
+        <div class="rc-footer-label">Next Term Fee</div>
+        <div class="rc-footer-val"></div>
+      </div>
+      <div class="rc-footer-cell">
+        <div class="rc-footer-label">Reopening Date</div>
+        <div class="rc-footer-val"></div>
+      </div>
+    </div>
+    <div class="rc-comment-row">
+      <span class="rc-comment-label">Class Teacher's Comment:</span>
+      <span class="rc-comment-line"></span>
+      <span class="rc-sign">Sign: <span class="rc-sign-line"></span></span>
+    </div>
+    <div class="rc-comment-row" style="border:1px solid #000;border-top:none">
+      <span class="rc-comment-label">Principal's Comment:</span>
+      <span class="rc-comment-line"></span>
+      <span class="rc-sign">Sign: <span class="rc-sign-line"></span></span>
+    </div>
+  </div>`;
+}
+
+/* ══════════════════════════════════════════════════════
+   Open report card modal
+══════════════════════════════════════════════════════ */
+function openReportCard(studentId, studentName) {
+  if (!window._cls_state) return;
+  const student = window._cls_state.students.find(s => s.id === studentId);
+  if (!student) return;
+
+  const html = buildReportCard(student);
+
+  const ov = document.createElement('div');
+  ov.className = 'rc-overlay';
+  ov.id = 'rc-overlay';
+  ov.innerHTML = `
+    <div class="rc-modal">
+      <div class="rc-modal-bar">
+        <span class="rc-modal-bar-title">${student.name} — Report Card</span>
+        <div class="rc-modal-actions">
+          <button class="btn btn-primary btn-sm" onclick="printSingleCard(this)">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+            Print
+          </button>
+          <button class="btn btn-ghost btn-sm" onclick="document.getElementById('rc-overlay').remove()">✕ Close</button>
+        </div>
+      </div>
+      <div class="rc-modal-body">${html}</div>
+    </div>`;
+
+  document.body.appendChild(ov);
+  ov.addEventListener('click', e => { if (e.target === ov) ov.remove(); });
+  document.addEventListener('keydown', function handler(e) {
+    if (e.key === 'Escape') { ov.remove(); document.removeEventListener('keydown', handler); }
+  });
+}
+
+/* Print single card — inject into print container, print, restore */
+function printSingleCard(btn) {
+  const rc   = btn.closest('.rc-modal').querySelector('.report-card');
+  const wrap = document.getElementById('print-rc-wrap');
+  wrap.innerHTML = rc.outerHTML;
+  /* Temporarily hide the overlay */
+  const ov = document.getElementById('rc-overlay');
+  if (ov) ov.style.display = 'none';
+  window.print();
+  if (ov) ov.style.display = 'flex';
+  wrap.innerHTML = '';
+}
+
+/* Print All — build all cards into print container */
+function printAll() {
+  if (!window._cls_state) { toast.warning('Nothing to print', 'Load results first.'); return; }
+  const wrap = document.getElementById('print-rc-wrap');
+  wrap.innerHTML = window._cls_state.students
+    .map(s => buildReportCard(s))
+    .join('');
+  window.print();
+  wrap.innerHTML = '';
+}
+
+/* ══════════════════════════════════════════════════════
+   Boot
+══════════════════════════════════════════════════════ */
+document.addEventListener('DOMContentLoaded', async () => {
+
+  /* Auth guard */
+  teacher = getTeacher();
+  if (!teacher || teacher.role !== 'Class Teacher') {
+    window.location.replace('login.html');
+    return;
+  }
+
+  /* Class Teacher stores a single level e.g. "SS3" — we need the section too.
+     The teacher's `classes` field holds the level; we don't know section from
+     login alone. To auto-scope properly we look up their full classes field. */
+  currentClass = teacher.classes; /* May be "SS3" (level) or "SS3B" (section) */
+
+  try {
+    SQL = await initSqlJs({ locateFile: f => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.2/${f}` });
+
+    const [sB, scB, cfg] = await Promise.all([
+      idbGet(IDB.students.name, IDB.students.store, IDB.students.key),
+      idbGet(IDB.scores.name,   IDB.scores.store,   IDB.scores.key),
+      idbGet(IDB.settings.name, IDB.settings.store, IDB.settings.key).catch(() => null),
+    ]);
+
+    studentsDB = sB  ? new SQL.Database(new Uint8Array(sB))  : null;
+    scoresDB   = scB ? new SQL.Database(new Uint8Array(scB)) : null;
+    if (cfg?.schoolName) schoolName = cfg.schoolName;
+
+  } catch(e) {
+    document.querySelector('.boot-sub').textContent = 'Failed to load. Please refresh.';
+    return;
+  }
+
+  hideBoot('app');
+  await buildSessionFromSettings();
+
+  /* If teacher.classes is a level (e.g. "SS3") we need to resolve to a section.
+     Check which section tables actually contain students in the students DB. */
+  if (currentClass && !currentClass.match(/[A-D]$/i) && studentsDB) {
+    const sections = ['A','B','C','D'].map(s => `${currentClass}${s}`);
+    for (const sec of sections) {
+      try {
+        const r = studentsDB.exec(`SELECT COUNT(*) FROM "${sec}"`);
+        if (r.length && r[0].values[0][0] > 0) { currentClass = sec; break; }
+      } catch {}
+    }
+  }
+
+  document.getElementById('t-name').textContent  = teacher.name;
+  document.getElementById('t-class').textContent = currentClass;
+
+  if (!studentsDB) toast.warning('Students DB missing', 'Import students.db first.');
+  if (!scoresDB)   toast.warning('Scores DB missing',   'Scores have not been compiled yet.');
+
+  document.getElementById('load-btn').addEventListener('click', loadResults);
+
+  /* Print All wired to topbar button */
+  document.querySelector('.nav-right .btn-secondary').addEventListener('click', printAll);
+
+  document.getElementById('logout-btn').addEventListener('click', () => {
+    sessionStorage.removeItem('gnoke_school_session');
+    window.location.replace('login.html');
+  });
+
+  /* Hamburger — menu.js not loaded here; minimal sidebar not needed */
+  document.getElementById('menuBtn').style.display = 'none';
+});
+</script>
+</body>
+</html>

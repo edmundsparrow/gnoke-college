@@ -9,20 +9,6 @@
   <style>
     body { margin: 0; }
 
-    /* ── Login ── */
-    #login-screen {
-      display: none; min-height: 100vh; align-items: center;
-      justify-content: center; background: var(--bg); padding: 20px;
-    }
-    .login-card {
-      background: var(--card-bg); border: 1px solid var(--border);
-      border-radius: var(--r-lg); padding: 36px 32px;
-      width: 100%; max-width: 380px; box-shadow: var(--sh-md);
-    }
-    .login-logo { font-family: serif; font-size: 1.6rem; font-weight: 700; color: var(--primary); }
-    .login-sub  { font-size: 0.82rem; color: var(--text-muted); margin-bottom: 26px; margin-top: 3px; }
-    .login-error { font-size: 0.78rem; color: var(--error); margin-top: 4px; display: none; }
-
     /* ── App ── */
     #app-screen { display: none; flex-direction: column; min-height: 100vh; }
 
@@ -148,7 +134,7 @@
     .print-header b { font-size: 10pt; }
     @media print {
       @page { size: landscape; margin: .5cm; }
-      #boot-screen, #login-screen, .topnav, .controls-bar, .sidebar, #sb-overlay { display: none !important; }
+      #boot-screen, .topnav, .controls-bar, .sidebar, #sb-overlay { display: none !important; }
       #app-screen { display: block !important; padding: 0; }
       .table-area { padding: 0; overflow: visible; }
       .score-table-wrap { border: none; box-shadow: none; min-width: 100%; }
@@ -170,29 +156,6 @@
   <div class="boot-logo">Score Compiler</div>
   <div class="boot-sub">Loading database engine...</div>
   <div class="spinner"></div>
-</div>
-
-<!-- Login -->
-<div id="login-screen">
-  <div class="login-card">
-    <div class="login-logo">Score Compiler</div>
-    <div class="login-sub">Sign in with your teacher credentials</div>
-    <div class="field-group" style="margin-bottom:14px">
-      <label class="field-label">Username</label>
-      <input type="text" id="l-username" class="field-input" placeholder="Your username" autocomplete="username">
-    </div>
-    <div class="field-group">
-      <label class="field-label">Password</label>
-      <div class="pw-wrap">
-        <input type="password" id="l-password" class="field-input" placeholder="6-digit password" maxlength="6" autocomplete="current-password">
-        <button class="pw-eye" type="button" onclick="togglePw('l-password')">👁</button>
-      </div>
-      <div class="login-error" id="login-error">Invalid username or password.</div>
-    </div>
-    <div style="margin-top:20px">
-      <button class="btn btn-primary" style="width:100%" id="login-btn">Sign In</button>
-    </div>
-  </div>
 </div>
 
 <!-- App -->
@@ -556,7 +519,6 @@ function showStats() {
 
 /* ── Show app after login ── */
 function showApp() {
-  document.getElementById('login-screen').style.display = 'none';
   document.getElementById('app-screen').style.display   = 'flex';
   document.getElementById('t-name').textContent    = currentTeacher.name;
   document.getElementById('t-subject').textContent = currentTeacher.subject;
@@ -572,10 +534,21 @@ function showApp() {
 
 /* ── Boot ── */
 document.addEventListener('DOMContentLoaded', async () => {
+
+  /* Auth guard — must be Subject Teacher */
+  const _raw = sessionStorage.getItem('gnoke_school_session');
+  if (!_raw) { location.replace('login.html'); return; }
+  try {
+    const _sess = JSON.parse(_raw);
+    if (_sess.role !== 'Subject Teacher') { location.replace('login.html'); return; }
+    currentTeacher = _sess;
+  } catch { location.replace('login.html'); return; }
+
   try {
     SQL = await initSqlJs({ locateFile: f => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.2/${f}` });
     document.querySelector('.boot-sub').textContent = 'Loading databases...';
     await loadDBs();
+    await buildSessionFromSettings();
   } catch(e) {
     document.querySelector('.boot-sub').textContent = 'Failed. Please refresh.';
     return;
@@ -583,25 +556,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   const boot = document.getElementById('boot-screen');
   boot.classList.add('hidden');
-  setTimeout(() => {
-    boot.style.display = 'none';
-    document.getElementById('login-screen').style.display = 'flex';
-  }, 380);
-
-  /* Login */
-  function doLogin() {
-    const u    = document.getElementById('l-username').value;
-    const p    = document.getElementById('l-password').value;
-    const errEl = document.getElementById('login-error');
-    if (!teachersDB) { errEl.textContent = 'Teachers DB not found. Run the staff module first.'; errEl.style.display = 'block'; return; }
-    const teacher = verifyTeacher(u, p);
-    if (!teacher) { errEl.style.display = 'block'; document.getElementById('l-password').value = ''; return; }
-    errEl.style.display = 'none';
-    currentTeacher = teacher;
-    showApp();
-  }
-  document.getElementById('login-btn').onclick = doLogin;
-  document.getElementById('l-password').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+  setTimeout(() => { boot.style.display = 'none'; showApp(); }, 380);
 
   /* Class / term / session controls */
   document.getElementById('class-select').addEventListener('change', async () => {
@@ -657,10 +612,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     closeSb();
     if (hasUnsaved && !await confirm_modal('Unsaved Changes','You have unsaved changes. Logout anyway?','Logout','btn-danger')) return;
     currentTeacher = null; hasUnsaved = false;
-    document.getElementById('app-screen').style.display   = 'none';
-    document.getElementById('login-screen').style.display = 'flex';
-    document.getElementById('l-username').value = '';
-    document.getElementById('l-password').value = '';
+    sessionStorage.removeItem('gnoke_school_session');
+    location.replace('login.html');
   };
 
   window.addEventListener('beforeunload', e => { if (hasUnsaved) { e.preventDefault(); e.returnValue = ''; } });
