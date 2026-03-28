@@ -1,0 +1,5 @@
+# Netlify / Vercel redirects — legacy filenames → clean paths
+/attendance1.html   /ledger/    301
+/attendance2.html   /register/  301
+/attendance3.html   /analysis/  301
+/attendance4.html   /sessions/  301
